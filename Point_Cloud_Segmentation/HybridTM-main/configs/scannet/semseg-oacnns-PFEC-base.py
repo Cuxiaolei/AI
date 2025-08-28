@@ -32,8 +32,8 @@ model = dict(
         dec_depth=[2, 2, 2, 2],  # Decoder各阶段UpBlock数量，保持原配置
         enc_num_ref=[16, 16, 16, 16],  # 原模型参考点数量，保持兼容
         # 新增：PLCCL损失参数（对应改进点3，强化电力线连续性）
-        # plccl_temperature=0.1,   # 对比损失温度系数，控制相似度分布
-        # plccl_gamma=0.5          # 连续性约束权重，平衡InfoNCE与距离惩罚
+        plccl_temperature=0.1,   # 对比损失温度系数，控制相似度分布
+        plccl_gamma=0.5          # 连续性约束权重，平衡InfoNCE与距离惩罚
     ),
     # 关键调整：新增PLCCL损失，与交叉熵损失加权融合（多损失协同训练）
     criteria=[
