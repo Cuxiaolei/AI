@@ -10,6 +10,7 @@ from .stratified_transformer import *
 from .spvcnn import *
 from .octformer import *
 from .oacnns import *
+from .oacnns import *
 # 在 pointcept/models/__init__.py 中添加
 from .hybridTM.hybridTM import HybridTM
 # from .swin3d.swin3d_v1m1_base import *

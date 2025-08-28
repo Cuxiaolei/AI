@@ -3,16 +3,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.ticker import MultipleLocator
 import os
+from datetime import datetime
 
 # 设置字体和样式
-plt.rcParams['font.family'] = ['Times New Roman', 'serif']
+plt.rcParams['font.family'] = ['Times New Roman','serif']
 plt.rcParams['font.size'] = 14
 plt.rcParams['axes.titlesize'] = 16
 plt.rcParams['axes.labelsize'] = 14
 plt.rcParams['xtick.labelsize'] = 12
 plt.rcParams['ytick.labelsize'] = 12
 plt.rcParams['legend.fontsize'] = 11  # 保持较小字体以节省空间
-plt.rcParams['lines.linewidth'] = 1.5
+plt.rcParams['lines.linewidth'] = 1
 plt.rcParams['figure.dpi'] = 600
 plt.rcParams['savefig.dpi'] = 600
 plt.rcParams['lines.markersize'] = 0
@@ -51,7 +52,7 @@ def generate_sample_data(num_epochs=100, num_models=7):
         oa = np.clip(oa, 0, 1)
 
         models_data[model_name] = {
-            'miou': miou,
+           'miou': miou,
             'oa': oa
         }
 
@@ -111,16 +112,19 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
 
     # 保存图片时确保包含完整图例
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_name = f"miou_{timestamp}.png"
+        full_path = os.path.join(save_path, file_name)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
         # 使用bbox_inches确保图例不被裁剪
         plt.savefig(
-            save_path,
+            full_path,
             dpi=600,
             bbox_inches='tight',
             pad_inches=0.3,  # 增加边距确保图例完整
             pil_kwargs=dict(quality=95)
         )
-        print(f"mIoU图表已保存至: {save_path}")
+        print(f"mIoU图表已保存至: {full_path}")
 
     plt.show()
 
@@ -178,15 +182,18 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
 
     # 保存图片
     if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_name = f"oa_{timestamp}.png"
+        full_path = os.path.join(save_path, file_name)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
         plt.savefig(
-            save_path,
+            full_path,
             dpi=600,
             bbox_inches='tight',
             pad_inches=0.3,
             pil_kwargs=dict(quality=95)
         )
-        print(f"OA图表已保存至: {save_path}")
+        print(f"OA图表已保存至: {full_path}")
 
     plt.show()
 
@@ -215,7 +222,7 @@ def load_data_from_csv(file_path):
 
         if miou_col in df.columns and oa_col in df.columns:
             models_data[model] = {
-                'miou': df[miou_col].values,
+               'miou': df[miou_col].values,
                 'oa': df[oa_col].values
             }
 
@@ -230,14 +237,14 @@ def main():
     plot_miou_curve(
         models_data,
         num_epochs,
-        save_path="../z_picture/miou.png",
+        save_path="../z_picture/",
         title=""
     )
 
     plot_oa_curve(
         models_data,
         num_epochs,
-        save_path="../z_picture/oa.png",
+        save_path="../z_picture/",
         title=""
     )
 
