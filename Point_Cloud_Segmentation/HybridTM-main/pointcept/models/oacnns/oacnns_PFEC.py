@@ -8,8 +8,8 @@ from ..builder import MODELS
 from ..utils import offset2batch
 from torch_geometric.nn.pool import voxel_grid
 from torch_geometric.utils import scatter
-import time
 import logging
+import time
 
 # 配置调试日志
 logger = logging.getLogger(__name__)
@@ -456,72 +456,47 @@ class DownBlock(nn.Module):
         return x
 
 
-# 策略3: 电力线连续性约束对比学习（PLCCL）
-class PLCCLoss(nn.Module):
-    def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
+class UpBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        skip_channels,
+        embed_channels,
+        depth,
+        sp_indice_key,
+        norm_fn=None,
+        down_ratio=2,
+        sub_indice_key=None,
+    ):
         super().__init__()
-        self.temperature = temperature
-        self.gamma = gamma
-        self.loss_weight = loss_weight
-        self.requires_coords = True
+        assert depth > 0
+        self.up = spconv.SparseSequential(
+            spconv.SparseInverseConv3d(
+                in_channels,
+                embed_channels,
+                kernel_size=down_ratio,
+                indice_key=sp_indice_key,
+                bias=False,
+            ),
+            norm_fn(embed_channels),
+            nn.ReLU(),
+        )
+        self.blocks = nn.ModuleList()
+        self.fuse = nn.Sequential(
+            nn.Linear(skip_channels + embed_channels, embed_channels),
+            norm_fn(embed_channels),
+            nn.ReLU(),
+            nn.Linear(embed_channels, embed_channels),
+            norm_fn(embed_channels),
+            nn.ReLU(),
+        )
 
-    def forward(self, features, labels, coords):
-        start_time = time.time()
-        logger.debug(
-            f"PLCCLoss forward start - features shape: {features.shape}, labels shape: {labels.shape}, coords shape: {coords.shape}")
-
-        # 筛选电力线点
-        line_mask = labels == 2
-        line_count = line_mask.sum().item()
-        logger.debug(f"PLCCLoss found {line_count} power line points")
-
-        if line_count < 2:
-            logger.debug(f"Not enough power line points ({line_count}), returning 0 loss")
-            return torch.tensor(0.0, device=features.device) * self.loss_weight
-
-        # 提取电力线特征和坐标
-        extract_start = time.time()
-        line_feats = features[line_mask]
-        line_coords = coords[line_mask]
-        logger.debug(
-            f"PLCCLoss feature extraction took {time.time() - extract_start:.4f}s - line_feats shape: {line_feats.shape}")
-
-        # 计算特征相似度
-        sim_start = time.time()
-        feat_sim = F.cosine_similarity(line_feats.unsqueeze(1), line_feats.unsqueeze(0), dim=2)
-        logger.debug(f"Feature similarity calculation took {time.time() - sim_start:.4f}s - shape: {feat_sim.shape}")
-
-        # 计算空间距离和掩码
-        dist_start = time.time()
-        coord_dist = torch.cdist(line_coords, line_coords)
-        pos_mask = (coord_dist < 1.0) & (coord_dist > 1e-6)
-        neg_mask = ~pos_mask
-        logger.debug(
-            f"Spatial distance calculation took {time.time() - dist_start:.4f}s - pos_mask count: {pos_mask.sum().item()}")
-
-        # 计算InfoNCE损失
-        nce_start = time.time()
-        exp_sim = torch.exp(feat_sim / self.temperature)
-        sum_exp = exp_sim * neg_mask.float()
-        sum_exp = sum_exp.sum(dim=1, keepdim=True)
-        pos_exp = exp_sim * pos_mask.float()
-        pos_sum = pos_exp.sum(dim=1)
-        info_nce_loss = -torch.log(pos_sum / (sum_exp.squeeze() + pos_sum + 1e-6)).mean()
-        logger.debug(f"InfoNCE loss calculation took {time.time() - nce_start:.4f}s - value: {info_nce_loss.item()}")
-
-        # 计算连续性约束损失
-        cont_start = time.time()
-        feat_dist = 1 - feat_sim
-        continuity_loss = torch.mean(torch.abs(feat_dist - coord_dist) * pos_mask.float())
-        logger.debug(
-            f"Continuity loss calculation took {time.time() - cont_start:.4f}s - value: {continuity_loss.item()}")
-
-        # 总损失
-        total_loss = (info_nce_loss + self.gamma * continuity_loss) * self.loss_weight
-        logger.debug(
-            f"PLCCLoss forward complete - total time: {time.time() - start_time:.4f}s - total loss: {total_loss.item()}")
-
-        return total_loss
+    def forward(self, x, skip_x):
+        x = self.up(x)
+        x = x.replace_feature(
+            self.fuse(torch.cat([x.features, skip_x.features], dim=1)) + x.features
+        )
+        return x
 
 
 @MODELS.register_module()
@@ -542,8 +517,6 @@ class OACNNs_PFEC(nn.Module):
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]]],
             dec_depth=[2, 2, 2, 2],
-            plccl_temperature=0.1,
-            plccl_gamma=0.5,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -604,89 +577,36 @@ class OACNNs_PFEC(nn.Module):
             )
 
         self.final = spconv.SubMConv3d(dec_channels[0], num_classes, kernel_size=1)
-        self.plccl_loss = PLCCLoss(temperature=plccl_temperature, gamma=plccl_gamma)
-
         self.apply(self._init_weights)
 
-    def forward(self, input_dict, labels=None):
-        start_time = time.time()
-        logger.debug(f"OACNNs_PFEC forward start - input keys: {input_dict.keys()}")
-
-        # 解析输入数据
-        parse_start = time.time()
+    def forward(self, input_dict):
         discrete_coord = input_dict["grid_coord"]
         feat = input_dict["feat"]
         offset = input_dict["offset"]
         batch = offset2batch(offset)
-
-        logger.debug(f"Input parsing took {time.time() - parse_start:.4f}s")
-        logger.debug(
-            f"Input shapes - coord: {discrete_coord.shape}, feat: {feat.shape}, offset: {offset.shape}, batch: {batch.shape}")
-
-        # 创建稀疏张量
-        sparse_start = time.time()
         x = spconv.SparseConvTensor(
             features=feat,
-            indices=torch.cat([batch.unsqueeze(-1), discrete_coord], dim=1).int().contiguous(),
-            spatial_shape=torch.add(torch.max(discrete_coord, dim=0).values, 1).tolist(),
+            indices=torch.cat([batch.unsqueeze(-1), discrete_coord], dim=1)
+            .int()
+            .contiguous(),
+            spatial_shape=torch.add(
+                torch.max(discrete_coord, dim=0).values, 1
+            ).tolist(),
             batch_size=batch[-1].tolist() + 1,
         )
-        logger.debug(
-            f"Sparse tensor creation took {time.time() - sparse_start:.4f}s - spatial shape: {x.spatial_shape}")
 
-        # Stem层处理
-        stem_start = time.time()
         x = self.stem(x)
-        logger.debug(f"Stem processing took {time.time() - stem_start:.4f}s - features shape: {x.features.shape}")
-
         skips = [x]
-        intermediate_features = [x.features.detach()]
-
-        # 编码器处理
-        enc_start = time.time()
         for i in range(self.num_stages):
-            enc_i_start = time.time()
             x = self.enc[i](x)
             skips.append(x)
-            intermediate_features.append(x.features.detach())
-            logger.debug(
-                f"Encoder stage {i} took {time.time() - enc_i_start:.4f}s - features shape: {x.features.shape}")
-        logger.debug(f"Encoder total time: {time.time() - enc_start:.4f}s")
-
-        # 解码器处理
-        dec_start = time.time()
         x = skips.pop(-1)
         for i in reversed(range(self.num_stages)):
-            dec_i_start = time.time()
             skip = skips.pop(-1)
             x = self.dec[i](x, skip)
-            logger.debug(
-                f"Decoder stage {i} took {time.time() - dec_i_start:.4f}s - features shape: {x.features.shape}")
-        logger.debug(f"Decoder total time: {time.time() - dec_start:.4f}s")
-
-        # 最终预测
-        final_start = time.time()
         x = self.final(x)
-        output = x.features
-        logger.debug(f"Final prediction took {time.time() - final_start:.4f}s - output shape: {output.shape}")
-
-        # 计算损失（训练模式）
-        if self.training and labels is not None:
-            loss_start = time.time()
-            # 确保坐标和标签维度匹配
-            if discrete_coord.shape[0] != labels.shape[0]:
-                coord = discrete_coord[:labels.shape[0]]
-                logger.debug(f"Adjusted coordinate shape to match labels: {coord.shape}")
-            else:
-                coord = discrete_coord
-
-            plccl_loss = self.plccl_loss(intermediate_features[-2], labels, coord)
-            logger.debug(f"Loss calculation took {time.time() - loss_start:.4f}s")
-            logger.debug(f"OACNNs_PFEC forward complete - total time: {time.time() - start_time:.4f}s")
-            return output, plccl_loss
-        else:
-            logger.debug(f"OACNNs_PFEC forward complete - total time: {time.time() - start_time:.4f}s")
-            return output
+        # 仅返回预测结果（logits），损失由框架外部根据配置计算
+        return x.features
 
     @staticmethod
     def _init_weights(m):
@@ -701,61 +621,3 @@ class OACNNs_PFEC(nn.Module):
         elif isinstance(m, nn.BatchNorm1d):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
-
-
-class UpBlock(nn.Module):
-    def __init__(
-            self,
-            in_channels,
-            skip_channels,
-            embed_channels,
-            depth,
-            sp_indice_key,
-            norm_fn=None,
-            down_ratio=2,
-            sub_indice_key=None,
-    ):
-        super().__init__()
-        assert depth > 0
-        self.up = spconv.SparseSequential(
-            spconv.SparseInverseConv3d(
-                in_channels,
-                embed_channels,
-                kernel_size=down_ratio,
-                indice_key=sp_indice_key,
-                bias=False,
-            ),
-            norm_fn(embed_channels),
-            nn.ReLU(),
-        )
-        self.blocks = nn.ModuleList()
-        self.fuse = nn.Sequential(
-            nn.Linear(skip_channels + embed_channels, embed_channels),
-            norm_fn(embed_channels),
-            nn.ReLU(),
-            nn.Linear(embed_channels, embed_channels),
-            norm_fn(embed_channels),
-            nn.ReLU(),
-        )
-
-    def forward(self, x, skip_x):
-        block_id = id(self) % 1000
-        start_time = time.time()
-        logger.debug(
-            f"UpBlock {block_id} forward start - x shape: {x.features.shape}, skip_x shape: {skip_x.features.shape}")
-
-        # 上采样
-        up_start = time.time()
-        x = self.up(x)
-        logger.debug(f"UpBlock {block_id} upsampling took {time.time() - up_start:.4f}s - shape: {x.features.shape}")
-
-        # 特征融合
-        fuse_start = time.time()
-        x = x.replace_feature(
-            self.fuse(torch.cat([x.features, skip_x.features], dim=1)) + x.features
-        )
-        logger.debug(
-            f"UpBlock {block_id} fusion took {time.time() - fuse_start:.4f}s - output shape: {x.features.shape}")
-
-        logger.debug(f"UpBlock {block_id} forward complete - total time: {time.time() - start_time:.4f}s")
-        return x

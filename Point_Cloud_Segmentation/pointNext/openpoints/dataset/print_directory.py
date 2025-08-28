@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # Windows系统: target_dir = "C:\\Users\\YourName\\Documents"
     # macOS/Linux系统: target_dir = "/home/yourname/documents"
     # target_dir = r"D:\user\Documents\ai\paper\1_process\dataSet\data_scannet_tower\output"
-    target_dir = r"D:\user\Documents\ai\paper\1_process\dataSet\data_scannet_tower\tower"
+    target_dir = r"D:\user\code\AI\Point_Cloud_Segmentation\HybridTM-main\pointcept\models"
 
     print(f"目录结构: {target_dir}")
     print_directory_structure(target_dir)
