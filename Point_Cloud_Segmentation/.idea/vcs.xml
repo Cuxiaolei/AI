@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$/Point++" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/Point-SAM-main" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/Pointcept-main" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/Pointnet_Pointnet2_pytorch-master" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/Stratified-Transformer-main" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pointNext" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pointnet2-master" vcs="Git" />
+  </component>
+</project>
