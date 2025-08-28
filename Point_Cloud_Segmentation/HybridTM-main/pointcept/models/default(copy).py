@@ -22,18 +22,11 @@ class DefaultSegmentor(nn.Module):
         seg_logits = self.backbone(input_dict)
         # train
         if self.training:
-            # 检查是否需要坐标参数
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            loss = self.criteria(seg_logits, input_dict["segment"])
             return dict(loss=loss)
         # eval
         elif "segment" in input_dict.keys():
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            loss = self.criteria(seg_logits, input_dict["segment"])
             return dict(loss=loss, seg_logits=seg_logits)
         # test
         else:
@@ -70,19 +63,12 @@ class DefaultSegmentorV2(nn.Module):
         seg_logits = self.seg_head(feat)
         # train
         if self.training:
-            # 检查是否需要坐标参数
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            loss = self.criteria(seg_logits, input_dict["segment"])
             loss = torch.nan_to_num(loss)
             return dict(loss=loss)
         # eval
         elif "segment" in input_dict.keys():
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            loss = self.criteria(seg_logits, input_dict["segment"])
             loss = torch.nan_to_num(loss)
             return dict(loss=loss, seg_logits=seg_logits)
         # test
