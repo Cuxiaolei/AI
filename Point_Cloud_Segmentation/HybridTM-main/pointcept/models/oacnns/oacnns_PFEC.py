@@ -33,21 +33,24 @@ class PFASModule(nn.Module):
         start_time = time.time()
         logger.debug(
             f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch shape: {batch.shape}")
+        N = coord.shape[0]  # 总点数
         B = batch.max().item() + 1 if batch.numel() > 0 else 0
         if B == 0:
             logger.debug("PFAS: Empty batch, returning default grid")
-            return torch.ones_like(coord) * self.grid_size_options[1][0]  # 背景网格默认值
+            return torch.ones_like(coord) * self.grid_size_options[1][0]
 
-        # 优化1：批量处理所有batch，避免for循环遍历batch
-        # 1. 生成batch掩码矩阵（B x N）
-        batch_mask = (batch.unsqueeze(0) == torch.arange(B, device=batch.device).unsqueeze(1)).float()
-        # 2. 计算每个点的近邻（批量KNN，替代逐batch cdist）
-        # 全局距离矩阵（N x N）→ 按batch掩码过滤非本batch点
-        dist = torch.cdist(coord, coord)
-        dist = dist * batch_mask.T  # 非本batch点的距离设为0，后续用inf屏蔽
-        dist[dist == 0] = torch.inf  # 屏蔽自身和非本batch点
-        # 批量找近邻（N x K）
-        _, idx = torch.topk(dist, self.K, largest=False)  # 优化：K从32→16
+        # 修正1：构造 [N, N] 的同一样本掩码矩阵
+        batch_mask = (batch.unsqueeze(0) == batch.unsqueeze(1)).float()  # [N, N]
+
+        # 计算距离矩阵（N x N），并过滤跨样本点对
+        dist = torch.cdist(coord, coord)  # [N, N]
+        # 修正2：只保留同一样本内的点对距离，跨样本点对距离设为无穷大
+        dist = dist * batch_mask  # 非本样本点对距离置0
+        dist = dist + (1 - batch_mask) * torch.inf  # 非本样本点对距离设为inf（屏蔽）
+        dist[torch.eye(N, device=dist.device).bool()] = torch.inf  # 屏蔽自身距离（对角线）
+
+        # 后续KNN等操作保持不变
+        _, idx = torch.topk(dist, self.K, largest=False)  # [N, K]
 
         # 3. 批量提取近邻坐标（N x K x 3）
         neighbor_coords = coord[idx]  # 利用索引批量获取，替代逐点循环
