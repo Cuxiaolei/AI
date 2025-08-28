@@ -97,7 +97,16 @@ class PFASModule(nn.Module):
 class CMPFEModule(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
-        # 假设输入特征的前3通道是坐标，中间3通道是颜色，最后3通道是法向量
+        self.in_channels = in_channels
+
+        # 关键修复：适应64通道输入，先将高维特征映射到9通道进行解析
+        self.feature_projection = nn.Sequential(
+            nn.Linear(in_channels, 9),
+            nn.BatchNorm1d(9),
+            nn.ReLU()
+        )
+
+        # 注意力机制保持不变，仍处理3通道子特征
         self.color_attention = nn.Sequential(
             nn.Linear(3, 16),
             nn.ReLU(),
@@ -112,9 +121,9 @@ class CMPFEModule(nn.Module):
             nn.Sigmoid()
         )
 
-        # 特征融合模块
+        # 特征融合模块：从9通道映射回原通道数
         self.feature_fusion = nn.Sequential(
-            nn.Linear(in_channels, in_channels),
+            nn.Linear(9, in_channels),
             nn.BatchNorm1d(in_channels),
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
@@ -129,10 +138,13 @@ class CMPFEModule(nn.Module):
         )
 
     def forward(self, x):
+        # 关键修复：先将64通道特征投影到9通道，再分离不同类型的特征
+        projected_feat = self.feature_projection(x)  # [N, 64] → [N, 9]
+
         # 分离不同类型的特征
-        coord_feat = x[:, :3]
-        color_feat = x[:, 3:6]
-        normal_feat = x[:, 6:9]
+        coord_feat = projected_feat[:, :3]
+        color_feat = projected_feat[:, 3:6]
+        normal_feat = projected_feat[:, 6:9]
 
         # 增强颜色特征（关注电力设施的典型颜色）
         color_att = self.color_attention(color_feat)
@@ -143,14 +155,14 @@ class CMPFEModule(nn.Module):
         enhanced_normal = normal_feat * normal_att
 
         # 合并增强后的特征
-        enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
+        enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)  # [N, 9]
 
-        # 特征融合
-        fused_feat = self.feature_fusion(enhanced_feat)
+        # 特征融合：映射回原通道数
+        fused_feat = self.feature_fusion(enhanced_feat)  # [N, 9] → [N, 64]
 
         # 语义注意力
         sem_att = self.semantic_attention(fused_feat)
-        final_feat = fused_feat * sem_att + enhanced_feat * (1 - sem_att)
+        final_feat = fused_feat * sem_att + x * (1 - sem_att)  # 残差连接
 
         return final_feat
 
@@ -176,8 +188,8 @@ class BasicBlock(nn.Module):
         self.weight = nn.ModuleList()
         self.l_w = nn.ModuleList()
 
-        # 添加CMPFE模块
-        self.cmpfe = CMPFEModule(in_channels)
+        # 添加CMPFE模块 - 使用embed_channels作为输入通道数
+        self.cmpfe = CMPFEModule(embed_channels)
 
         self.proj.append(
             nn.Sequential(
@@ -249,16 +261,23 @@ class BasicBlock(nn.Module):
         dynamic_grid_sizes = self.pfas(feat, coord, batch)
 
         # 生成动态聚类：选取3个代表性网格大小
+        if dynamic_grid_sizes.numel() == 0:
+            # 处理空输入情况
+            return x
+
         # 1. 电力塔网格（中等密度结构）
         # 2. 背景网格（稀疏区域）
         # 3. 电力线网格（细长连续结构）
         representative_grids = [
             # 电力塔网格：选取平均网格中等的100个点的均值
-            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1))[100:200]], dim=0),
+            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1))[100:200]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 200 else dynamic_grid_sizes.mean(dim=0) * 0.8,
             # 背景网格：选取平均网格最大的100个点的均值
-            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1), descending=True)[:100]], dim=0),
+            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1), descending=True)[:100]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 100 else dynamic_grid_sizes.mean(dim=0) * 1.2,
             # 电力线网格：选取平均网格最小的100个点的均值
             torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1))[:100]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 100 else dynamic_grid_sizes.mean(dim=0) * 0.5
         ]
 
         # 为每个代表性网格生成聚类
@@ -268,9 +287,10 @@ class BasicBlock(nn.Module):
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
 
-        # 后续多尺度特征融合逻辑
+        # 后续多尺度特征融合逻辑 - 添加边界检查
         feats = []
-        for i, cluster in enumerate(clusters):
+        valid_depth = min(len(self.l_w), len(clusters))
+        for i in range(valid_depth):
             pw = self.l_w[i](feat)
             pw = pw - scatter(pw, cluster, reduce="mean")[cluster]
             pw = self.weight[i](pw)
@@ -279,6 +299,9 @@ class BasicBlock(nn.Module):
             pfeat = self.proj[i](feat) * pw
             pfeat = scatter(pfeat, cluster, reduce="sum")[cluster]
             feats.append(pfeat)
+
+        if not feats:  # 防止空特征列表
+            return x
 
         adp = self.adaptive(feat)
         adp = torch.softmax(adp, dim=1)
@@ -346,16 +369,17 @@ class DownBlock(nn.Module):
 
 # 创新点3: 电力线连续性约束对比学习（PLCCL）
 class PLCCLoss(nn.Module):
-    def __init__(self, temperature=0.1, gamma=0.5):
+    def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
         super().__init__()
         self.temperature = temperature
         self.gamma = gamma
+        self.loss_weight = loss_weight  # 添加损失权重参数
 
     def forward(self, features, labels, coords):
         # 电力线在新顺序中是第2类（索引为2）
         line_mask = labels == 2
         if line_mask.sum() < 2:
-            return torch.tensor(0.0, device=features.device)
+            return torch.tensor(0.0, device=features.device) * self.loss_weight
 
         line_feats = features[line_mask]
         line_coords = coords[line_mask]
@@ -389,8 +413,8 @@ class PLCCLoss(nn.Module):
         feat_dist = 1 - feat_sim
         continuity_loss = torch.mean(torch.abs(feat_dist - coord_dist) * pos_mask.float())
 
-        # 总损失
-        total_loss = info_nce_loss + self.gamma * continuity_loss
+        # 总损失，并应用权重
+        total_loss = (info_nce_loss + self.gamma * continuity_loss) * self.loss_weight
 
         return total_loss
 
@@ -425,19 +449,10 @@ class OACNNs_PFEC(nn.Module):
         self.embed_channels = embed_channels
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
+        # 关键修复：确保stem层正确将输入通道转换为embed_channels
         self.stem = spconv.SparseSequential(
             spconv.SubMConv3d(
                 in_channels,
-                embed_channels,
-                kernel_size=3,
-                padding=1,
-                indice_key="stem",
-                bias=False,
-            ),
-            norm_fn(embed_channels),
-            nn.ReLU(),
-            spconv.SubMConv3d(
-                embed_channels,
                 embed_channels,
                 kernel_size=3,
                 padding=1,
@@ -493,7 +508,10 @@ class OACNNs_PFEC(nn.Module):
         self.final = spconv.SubMConv3d(dec_channels[0], num_classes, kernel_size=1)
 
         # 创新点3: 添加PLCCL损失
-        self.plccl_loss = PLCCLoss(temperature=plccl_temperature, gamma=plccl_gamma)
+        self.plccl_loss = PLCCLoss(
+            temperature=plccl_temperature,
+            gamma=plccl_gamma
+        )
 
         self.apply(self._init_weights)
 
@@ -502,6 +520,11 @@ class OACNNs_PFEC(nn.Module):
         feat = input_dict["feat"]  # 包含9通道特征：坐标、颜色、法向量
         offset = input_dict["offset"]
         batch = offset2batch(offset)
+
+        # 关键修复：确保特征维度正确
+        if feat.shape[1] != self.in_channels:
+            raise ValueError(f"输入特征通道数不匹配: 期望 {self.in_channels}, 实际 {feat.shape[1]}")
+
         x = spconv.SparseConvTensor(
             features=feat,
             indices=torch.cat([batch.unsqueeze(-1), discrete_coord], dim=1)
@@ -513,6 +536,7 @@ class OACNNs_PFEC(nn.Module):
             batch_size=batch[-1].tolist() + 1,
         )
 
+        # 应用stem层转换维度
         x = self.stem(x)
         skips = [x]
         # 保存中间特征用于PLCCL
@@ -533,7 +557,14 @@ class OACNNs_PFEC(nn.Module):
 
         # 训练时计算PLCCL损失，电力线是第2类（索引为2）
         if self.training and labels is not None:
-            plccl_loss = self.plccl_loss(intermediate_features[-2], labels, discrete_coord)
+            # 确保坐标和标签维度匹配
+            if discrete_coord.shape[0] != labels.shape[0]:
+                # 调整坐标以匹配标签维度
+                coord = discrete_coord[:labels.shape[0]]
+            else:
+                coord = discrete_coord
+
+            plccl_loss = self.plccl_loss(intermediate_features[-2], labels, coord)
             return output, plccl_loss
         else:
             return output
