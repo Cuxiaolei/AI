@@ -12,7 +12,6 @@ logger.setLevel(logging.DEBUG)
 
 
 @LOSSES.register_module()
-# 策略3: 电力线连续性约束对比学习（PLCCL）
 class PLCCLoss(nn.Module):
     def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0, ignore_index=-1):
         super().__init__()
@@ -22,17 +21,13 @@ class PLCCLoss(nn.Module):
         self.requires_coords = True
         self.ignore_index = ignore_index
 
-    # 核心修改：统一接收两个参数，从第二个参数中解析labels和coords
-    def forward(self, features, target_dict):
+    # 修改参数接收方式，适配模型传递的参数顺序
+    def forward(self, features, labels, coords=None):  # 直接接收三个参数
         start_time = time.time()
 
-        # 从目标字典中提取必要信息（框架需要这样传递数据）
-        labels = target_dict.get('segment', None)  # 标签
-        coords = target_dict.get('coords', None)  # 坐标
-
         # 校验必要数据是否存在
-        if labels is None or coords is None:
-            logger.warning("Missing labels or coords in target_dict, returning 0 loss")
+        if labels is None or (self.requires_coords and coords is None):
+            logger.warning("Missing labels or coords, returning 0 loss")
             return torch.tensor(0.0, device=features.device) * self.loss_weight
 
         logger.debug(
