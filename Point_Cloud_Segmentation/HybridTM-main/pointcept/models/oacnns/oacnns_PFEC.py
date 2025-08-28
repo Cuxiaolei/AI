@@ -354,7 +354,6 @@ class DownBlock(nn.Module):
 
 
 # 策略3: 电力线连续性约束对比学习（PLCCL）
-@LOSSES.register_module()
 class PLCCLoss(nn.Module):
     def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
         super().__init__()
