@@ -1,18 +1,19 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .builder import LOSSES
+from ..builder import LOSSES
 
 
 @LOSSES.register_module()
 class PLCCLoss(nn.Module):
     """Power Line Continuity Constrained Contrastive Loss"""
 
-    def __init__(self, temperature=0.1, gamma=0.5, ignore_index=-1):
+    def __init__(self, temperature=0.1, gamma=0.5, ignore_index=-1, loss_weight=1.0):
         super().__init__()
         self.temperature = temperature
         self.gamma = gamma
         self.ignore_index = ignore_index
+        self.loss_weight = loss_weight  # 新增：损失权重参数
 
     def forward(self, features, labels, coords):
         # 电力线在类别顺序中是第2类（索引为2）
@@ -28,7 +29,6 @@ class PLCCLoss(nn.Module):
 
         # 计算3D空间距离
         coord_dist = torch.cdist(line_coords, line_coords)
-        coord_sim = torch.exp(-coord_dist)
 
         # 构建正样本对（空间距离近的点）
         pos_mask = coord_dist < 1.0  # 距离小于1m的视为连续点
@@ -51,7 +51,7 @@ class PLCCLoss(nn.Module):
         feat_dist = 1 - feat_sim
         continuity_loss = torch.mean(torch.abs(feat_dist - coord_dist) * pos_mask.float())
 
-        # 总损失
-        total_loss = info_nce_loss + self.gamma * continuity_loss
+        # 总损失，并应用权重
+        total_loss = (info_nce_loss + self.gamma * continuity_loss) * self.loss_weight
 
         return total_loss
