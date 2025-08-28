@@ -2,30 +2,27 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 import spconv.pytorch as spconv
 from timm.models.layers import trunc_normal_
-from ..builder import MODELS
+from ..builder import MODELS, LOSSES
 from ..utils import offset2batch
 from torch_geometric.nn.pool import voxel_grid
 from torch_geometric.utils import scatter
 
 
-# 创新点1: 电力设施自适应尺度模块（PFAS）
+# 策略1: 电力设施自适应尺度模块（PFAS）
 class PFASModule(nn.Module):
     def __init__(self, in_channels, grid_size_options):
         super().__init__()
-        self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线] 顺序调整
-        # 用于判断点特征的MLP，输出顺序为[电力塔, 背景, 电力线]
+        self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线]
         self.feature_judge = nn.Sequential(
             nn.Linear(in_channels, 64),
             nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Linear(64, 3)  # 输出三类别的概率，顺序为[电力塔, 背景, 电力线]
+            nn.Linear(64, 3)  # 输出三类概率
         )
 
     def forward(self, feat, coord, batch):
-        # 计算局部线性度（判断是否为电力线）
         K = 32
         B = batch.max().item() + 1
         linearity = []
@@ -41,19 +38,16 @@ class PFASModule(nn.Module):
             points_b = coord[mask]
             dist = torch.cdist(points_b, points_b)
             _, idx = torch.topk(dist, K + 1, largest=False)
-            idx = idx[:, 1:K + 1]  # 排除自身，形状为[N, 32]
+            idx = idx[:, 1:K + 1]
 
             pca_features = []
             for i in range(points_b.shape[0]):
                 neighbors = points_b[idx[i]]
                 centered = neighbors - neighbors.mean(dim=0)
-
-                # 将协方差矩阵转换为float32进行SVD计算
                 cov = torch.matmul(centered.T, centered) / (K - 1)
-                cov_float = cov.to(torch.float32)
+                cov_float = cov.to(torch.float32)  # 修复半精度SVD问题
                 eigenvalues = torch.svd(cov_float).S
                 eigenvalues = eigenvalues.to(feat.dtype)
-
                 eigenvalues = eigenvalues / eigenvalues.sum()
                 pca_features.append(eigenvalues)
 
@@ -61,35 +55,28 @@ class PFASModule(nn.Module):
             linearness = pca_features[:, 0] - (pca_features[:, 1] + pca_features[:, 2])
             linearity.append(linearness)
 
-            # 关键修复：使用正确的索引方式计算平均距离
-            # 创建适合的行索引，形状为[N, 1]以匹配idx的[N, 32]
+            # 修复索引不匹配问题
             row_indices = torch.arange(points_b.shape[0], device=dist.device).unsqueeze(1)
-            # 现在可以正确索引，获取每个点的K个最近邻的距离
-            neighbor_dists = dist[row_indices, idx]  # 形状为[N, 32]
-            mean_dist = neighbor_dists.mean(dim=1)  # 形状为[N]
+            neighbor_dists = dist[row_indices, idx]
+            mean_dist = neighbor_dists.mean(dim=1)
             density_val = 1.0 / (mean_dist + 1e-6)
             density.append(density_val)
 
         linearity = torch.cat(linearity, dim=0)
         density = torch.cat(density, dim=0)
 
-        # 通过特征判断类别，输出顺序为[电力塔, 背景, 电力线]
         feat_logits = self.feature_judge(feat)
-        feat_probs = F.softmax(feat_logits, dim=1)  # [N, 3]，顺序为[电力塔, 背景, 电力线]
+        feat_probs = F.softmax(feat_logits, dim=1)
 
-        # 综合判断
-        # 电力塔: 中等线性度 + 高密度（顺序0）
+        # 计算三类别的概率
         tower_prob = (density.unsqueeze(1) * 2.0 + feat_probs[:, 0:1]) / 3.0
-        # 背景: 低线性度 + 低密度（顺序1）
         background_prob = (torch.maximum(1.0 - linearity.unsqueeze(1), 1.0 - density.unsqueeze(1)) + feat_probs[:,
                                                                                                      1:2]) / 3.0
-        # 电力线: 高线性度 + 低到中等密度（顺序2）
         line_prob = (linearity.unsqueeze(1) * 2.0 + feat_probs[:, 2:3]) / 3.0
 
         # 生成动态网格大小
         grid_sizes = torch.zeros_like(coord)
-        for i in range(3):  # x, y, z三个维度
-            # 电力线在z轴方向使用更大的网格以保持连续性
+        for i in range(3):
             tower_grid = self.grid_size_options[0][i]
             background_grid = self.grid_size_options[1][i]
             line_grid = self.grid_size_options[2][i] if i < 2 else self.grid_size_options[2][i] * 5
@@ -97,26 +84,26 @@ class PFASModule(nn.Module):
             grid_sizes[:, i] = (
                     tower_prob[:, 0] * tower_grid +
                     background_prob[:, 0] * background_grid +
-                    line_prob[:, 0] * line_grid
+                    line_prob[:, 0] * line_grid + 1e-6
             )
 
         return grid_sizes
 
 
-# 创新点2: 跨模态电力特征增强（CMPFE）
+# 策略2: 跨模态电力特征增强（CMPFE）
 class CMPFEModule(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.in_channels = in_channels
 
-        # 关键修复：适应64通道输入，先将高维特征映射到9通道进行解析
+        # 特征投影到9通道（匹配坐标3+颜色3+法向量3）
         self.feature_projection = nn.Sequential(
             nn.Linear(in_channels, 9),
             nn.BatchNorm1d(9),
             nn.ReLU()
         )
 
-        # 注意力机制保持不变，仍处理3通道子特征
+        # 颜色特征注意力机制
         self.color_attention = nn.Sequential(
             nn.Linear(3, 16),
             nn.ReLU(),
@@ -124,6 +111,7 @@ class CMPFEModule(nn.Module):
             nn.Sigmoid()
         )
 
+        # 法向量特征注意力机制
         self.normal_attention = nn.Sequential(
             nn.Linear(3, 16),
             nn.ReLU(),
@@ -131,7 +119,7 @@ class CMPFEModule(nn.Module):
             nn.Sigmoid()
         )
 
-        # 特征融合模块：从9通道映射回原通道数
+        # 特征融合模块
         self.feature_fusion = nn.Sequential(
             nn.Linear(9, in_channels),
             nn.BatchNorm1d(in_channels),
@@ -139,7 +127,7 @@ class CMPFEModule(nn.Module):
             nn.Linear(in_channels, in_channels)
         )
 
-        # 电力设施语义注意力 - 更关注电力塔和电力线
+        # 电力设施语义注意力
         self.semantic_attention = nn.Sequential(
             nn.Linear(in_channels, in_channels // 2),
             nn.ReLU(),
@@ -148,29 +136,21 @@ class CMPFEModule(nn.Module):
         )
 
     def forward(self, x):
-        # 关键修复：先将64通道特征投影到9通道，再分离不同类型的特征
-        projected_feat = self.feature_projection(x)  # [N, 64] → [N, 9]
+        # 投影到9通道特征
+        projected_feat = self.feature_projection(x)
 
-        # 分离不同类型的特征
+        # 按实际数据顺序分离特征（坐标→颜色→法向量）
         coord_feat = projected_feat[:, :3]
-        color_feat = projected_feat[:, 3:6]
-        normal_feat = projected_feat[:, 6:9]
+        color_feat = projected_feat[:, 3:6]  # 处理颜色特征（原数据3-5通道）
+        normal_feat = projected_feat[:, 6:9]  # 处理法向量特征（原数据6-8通道）
 
-        # 增强颜色特征（关注电力设施的典型颜色）
-        color_att = self.color_attention(color_feat)
-        enhanced_color = color_feat * color_att
+        # 特征增强
+        enhanced_color = color_feat * self.color_attention(color_feat)
+        enhanced_normal = normal_feat * self.normal_attention(normal_feat)
 
-        # 增强法向量特征（关注电力设施的结构特征）
-        normal_att = self.normal_attention(normal_feat)
-        enhanced_normal = normal_feat * normal_att
-
-        # 合并增强后的特征
-        enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)  # [N, 9]
-
-        # 特征融合：映射回原通道数
-        fused_feat = self.feature_fusion(enhanced_feat)  # [N, 9] → [N, 64]
-
-        # 语义注意力
+        # 特征融合与注意力加权
+        enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
+        fused_feat = self.feature_fusion(enhanced_feat)
         sem_att = self.semantic_attention(fused_feat)
         final_feat = fused_feat * sem_att + x * (1 - sem_att)  # 残差连接
 
@@ -194,11 +174,11 @@ class BasicBlock(nn.Module):
         self.groups = groups
         self.embed_channels = embed_channels
         self.proj = nn.ModuleList()
-        self.grid_size = grid_size  # 顺序为[电力塔, 背景, 电力线]
+        self.grid_size = grid_size
         self.weight = nn.ModuleList()
         self.l_w = nn.ModuleList()
 
-        # 添加CMPFE模块 - 使用embed_channels作为输入通道数
+        # 集成CMPFE模块
         self.cmpfe = CMPFEModule(embed_channels)
 
         self.proj.append(
@@ -256,51 +236,46 @@ class BasicBlock(nn.Module):
         )
         self.act = nn.ReLU()
 
-        # 添加PFAS模块
+        # 集成PFAS模块
         self.pfas = PFASModule(embed_channels, grid_size)
 
     def forward(self, x, clusters=None):
-        # 应用CMPFE模块增强特征
+        # 应用CMPFE特征增强
         enhanced_feat = self.cmpfe(x.features)
         x = x.replace_feature(enhanced_feat)
         feat = x.features
 
-        # 使用PFAS模块生成动态网格
+        # 应用PFAS生成动态网格
         coord = x.indices[:, 1:].float()
         batch = x.indices[:, 0]
         dynamic_grid_sizes = self.pfas(feat, coord, batch)
 
-        # 生成动态聚类：选取3个代表性网格大小
         if dynamic_grid_sizes.numel() == 0:
-            # 处理空输入情况
             return x
 
-        # 1. 电力塔网格（中等密度结构）
-        # 2. 背景网格（稀疏区域）
-        # 3. 电力线网格（细长连续结构）
+        # 生成代表性网格
+        grid_mean = dynamic_grid_sizes.mean(dim=1)
         representative_grids = [
-            # 电力塔网格：选取平均网格中等的100个点的均值
-            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1))[100:200]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 200 else dynamic_grid_sizes.mean(dim=0) * 0.8,
-            # 背景网格：选取平均网格最大的100个点的均值
-            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1), descending=True)[:100]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 100 else dynamic_grid_sizes.mean(dim=0) * 1.2,
-            # 电力线网格：选取平均网格最小的100个点的均值
-            torch.mean(dynamic_grid_sizes[torch.argsort(dynamic_grid_sizes.mean(dim=1))[:100]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 100 else dynamic_grid_sizes.mean(dim=0) * 0.5
+            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[100:200]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 200 else grid_mean.mean() * 0.8,
+            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:100]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 100 else grid_mean.mean() * 1.2,
+            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[:100]], dim=0)
+            if dynamic_grid_sizes.shape[0] > 100 else grid_mean.mean() * 0.5
         ]
 
-        # 为每个代表性网格生成聚类
+        # 生成多尺度聚类
         clusters = []
         for grid_size in representative_grids:
-            cluster = voxel_grid(pos=coord, size=grid_size.tolist(), batch=batch)
+            cluster = voxel_grid(pos=coord, size=torch.clamp(grid_size, min=1e-6).tolist(), batch=batch)
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
 
-        # 后续多尺度特征融合逻辑 - 添加边界检查
+        # 多尺度特征融合
         feats = []
         valid_depth = min(len(self.l_w), len(clusters))
         for i in range(valid_depth):
+            cluster = clusters[i]
             pw = self.l_w[i](feat)
             pw = pw - scatter(pw, cluster, reduce="mean")[cluster]
             pw = self.weight[i](pw)
@@ -310,17 +285,18 @@ class BasicBlock(nn.Module):
             pfeat = scatter(pfeat, cluster, reduce="sum")[cluster]
             feats.append(pfeat)
 
-        if not feats:  # 防止空特征列表
+        if not feats:
             return x
 
         adp = self.adaptive(feat)
         adp = torch.softmax(adp, dim=1)
         feats = torch.stack(feats, dim=1)
-        feats = torch.einsum("l n, l n c -> l c", adp, feats)
+        feats = torch.einsum("nc, ncd -> nd", adp, feats)
         feat = self.proj[-1](feat)
         feat = torch.cat([feat, feats], dim=1)
         feat = self.fuse(feat) + x.features
         res = feat
+
         x = x.replace_feature(feat)
         x = self.voxel_block(x)
         x = x.replace_feature(self.act(x.features + res))
@@ -343,7 +319,7 @@ class DownBlock(nn.Module):
         super().__init__()
         self.num_ref = num_ref
         self.depth = depth
-        self.point_grid_size = point_grid_size  # 顺序为[电力塔, 背景, 电力线]
+        self.point_grid_size = point_grid_size
         self.down = spconv.SparseSequential(
             spconv.SparseConv3d(
                 in_channels,
@@ -377,56 +353,45 @@ class DownBlock(nn.Module):
         return x
 
 
-# 创新点3: 电力线连续性约束对比学习（PLCCL）
+# 策略3: 电力线连续性约束对比学习（PLCCL）
+@LOSSES.register_module()
 class PLCCLoss(nn.Module):
     def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
         super().__init__()
         self.temperature = temperature
         self.gamma = gamma
-        self.loss_weight = loss_weight  # 添加损失权重参数
+        self.loss_weight = loss_weight
 
     def forward(self, features, labels, coords):
-        # 电力线在新顺序中是第2类（索引为2）
+        # 电力线标签为第2类（索引2）
         line_mask = labels == 2
         if line_mask.sum() < 2:
             return torch.tensor(0.0, device=features.device) * self.loss_weight
 
         line_feats = features[line_mask]
         line_coords = coords[line_mask]
-        line_labels = labels[line_mask]
 
-        # 计算特征相似度
+        # 特征相似度计算
         feat_sim = F.cosine_similarity(line_feats.unsqueeze(1), line_feats.unsqueeze(0), dim=2)
 
-        # 计算3D空间距离
+        # 空间距离计算
         coord_dist = torch.cdist(line_coords, line_coords)
-        coord_sim = torch.exp(-coord_dist)
-
-        # 构建正样本对（空间距离近的点）
-        pos_mask = coord_dist < 1.0  # 距离小于1m的视为连续点
-        pos_mask = pos_mask & (coord_dist > 1e-6)  # 排除自身
-
-        # 构建负样本对
+        pos_mask = (coord_dist < 1.0) & (coord_dist > 1e-6)  # 近邻点作为正样本
         neg_mask = ~pos_mask
 
-        # 计算InfoNCE损失
+        # InfoNCE损失
         exp_sim = torch.exp(feat_sim / self.temperature)
         sum_exp = exp_sim * neg_mask.float()
         sum_exp = sum_exp.sum(dim=1, keepdim=True)
-
         pos_exp = exp_sim * pos_mask.float()
         pos_sum = pos_exp.sum(dim=1)
-
         info_nce_loss = -torch.log(pos_sum / (sum_exp.squeeze() + pos_sum + 1e-6)).mean()
 
-        # 计算连续性约束损失
+        # 连续性约束损失
         feat_dist = 1 - feat_sim
         continuity_loss = torch.mean(torch.abs(feat_dist - coord_dist) * pos_mask.float())
 
-        # 总损失，并应用权重
-        total_loss = (info_nce_loss + self.gamma * continuity_loss) * self.loss_weight
-
-        return total_loss
+        return (info_nce_loss + self.gamma * continuity_loss) * self.loss_weight
 
 
 @MODELS.register_module()
@@ -442,8 +407,8 @@ class OACNNs_PFEC(nn.Module):
             enc_depth=[2, 3, 6, 4],
             down_ratio=[2, 2, 2, 2],
             dec_channels=[96, 96, 128, 256],
-            # 针对电力设施的网格大小选项：[电力塔, 背景, 电力线] 顺序已调整
-            point_grid_size=[[[3, 3, 3], [10, 10, 10], [1, 1, 5]],  # 电力塔, 背景, 电力线
+            # 电力设施网格配置：[电力塔, 背景, 电力线]
+            point_grid_size=[[[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]]],
@@ -459,7 +424,6 @@ class OACNNs_PFEC(nn.Module):
         self.embed_channels = embed_channels
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
-        # 关键修复：确保stem层正确将输入通道转换为embed_channels
         self.stem = spconv.SparseSequential(
             spconv.SubMConv3d(
                 in_channels,
@@ -493,7 +457,7 @@ class OACNNs_PFEC(nn.Module):
                     depth=enc_depth[i],
                     norm_fn=norm_fn,
                     groups=groups[i],
-                    point_grid_size=point_grid_size[i],  # 已调整为[电力塔, 背景, 电力线]
+                    point_grid_size=point_grid_size[i],
                     num_ref=enc_num_ref[i],
                     sp_indice_key=f"spconv{i}",
                     sub_indice_key=f"subm{i + 1}",
@@ -501,11 +465,7 @@ class OACNNs_PFEC(nn.Module):
             )
             self.dec.append(
                 UpBlock(
-                    in_channels=(
-                        enc_channels[-1]
-                        if i == self.num_stages - 1
-                        else dec_channels[i + 1]
-                    ),
+                    in_channels=enc_channels[-1] if i == self.num_stages - 1 else dec_channels[i + 1],
                     skip_channels=embed_channels if i == 0 else enc_channels[i - 1],
                     embed_channels=dec_channels[i],
                     depth=dec_depth[i],
@@ -516,40 +476,25 @@ class OACNNs_PFEC(nn.Module):
             )
 
         self.final = spconv.SubMConv3d(dec_channels[0], num_classes, kernel_size=1)
-
-        # 创新点3: 添加PLCCL损失
-        self.plccl_loss = PLCCLoss(
-            temperature=plccl_temperature,
-            gamma=plccl_gamma
-        )
+        self.plccl_loss = PLCCLoss(temperature=plccl_temperature, gamma=plccl_gamma)
 
         self.apply(self._init_weights)
 
     def forward(self, input_dict, labels=None):
         discrete_coord = input_dict["grid_coord"]
-        feat = input_dict["feat"]  # 包含9通道特征：坐标、颜色、法向量
+        feat = input_dict["feat"]  # 10通道输入：坐标3+颜色3+法向量3+标签1
         offset = input_dict["offset"]
         batch = offset2batch(offset)
 
-        # 关键修复：确保特征维度正确
-        if feat.shape[1] != self.in_channels:
-            raise ValueError(f"输入特征通道数不匹配: 期望 {self.in_channels}, 实际 {feat.shape[1]}")
-
         x = spconv.SparseConvTensor(
             features=feat,
-            indices=torch.cat([batch.unsqueeze(-1), discrete_coord], dim=1)
-            .int()
-            .contiguous(),
-            spatial_shape=torch.add(
-                torch.max(discrete_coord, dim=0).values, 1
-            ).tolist(),
+            indices=torch.cat([batch.unsqueeze(-1), discrete_coord], dim=1).int().contiguous(),
+            spatial_shape=torch.add(torch.max(discrete_coord, dim=0).values, 1).tolist(),
             batch_size=batch[-1].tolist() + 1,
         )
 
-        # 应用stem层转换维度
         x = self.stem(x)
         skips = [x]
-        # 保存中间特征用于PLCCL
         intermediate_features = [x.features.detach()]
 
         for i in range(self.num_stages):
@@ -565,15 +510,9 @@ class OACNNs_PFEC(nn.Module):
         x = self.final(x)
         output = x.features
 
-        # 训练时计算PLCCL损失，电力线是第2类（索引为2）
+        # 训练时计算PLCCL损失
         if self.training and labels is not None:
-            # 确保坐标和标签维度匹配
-            if discrete_coord.shape[0] != labels.shape[0]:
-                # 调整坐标以匹配标签维度
-                coord = discrete_coord[:labels.shape[0]]
-            else:
-                coord = discrete_coord
-
+            coord = discrete_coord[:labels.shape[0]] if discrete_coord.shape[0] != labels.shape[0] else discrete_coord
             plccl_loss = self.plccl_loss(intermediate_features[-2], labels, coord)
             return output, plccl_loss
         else:
