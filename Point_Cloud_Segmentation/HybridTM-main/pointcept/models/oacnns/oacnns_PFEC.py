@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import spconv.pytorch as spconv
 from timm.models.layers import trunc_normal_
-from ..builder import MODELS, LOSSES
+from ..builder import MODELS
 from ..utils import offset2batch
 from torch_geometric.nn.pool import voxel_grid
 from torch_geometric.utils import scatter
@@ -457,7 +457,6 @@ class DownBlock(nn.Module):
 
 
 # 策略3: 电力线连续性约束对比学习（PLCCL）
-@LOSSES.register_module()
 class PLCCLoss(nn.Module):
     def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
         super().__init__()
