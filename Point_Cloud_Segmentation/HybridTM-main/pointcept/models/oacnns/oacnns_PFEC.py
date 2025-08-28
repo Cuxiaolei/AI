@@ -16,11 +16,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# 策略1: 电力设施自适应尺度模块（PFAS）
+# 策略1: 电力设施自适应尺度模块（PFAS）- 优化版
 class PFASModule(nn.Module):
-    def __init__(self, in_channels, grid_size_options):
+    def __init__(self, in_channels, grid_size_options, K=16):  # 优化：K从32→16
         super().__init__()
         self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线]
+        self.K = K  # 近邻数减少，降低计算量
         self.feature_judge = nn.Sequential(
             nn.Linear(in_channels, 64),
             nn.BatchNorm1d(64),
@@ -32,147 +33,102 @@ class PFASModule(nn.Module):
         start_time = time.time()
         logger.debug(
             f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch shape: {batch.shape}")
+        B = batch.max().item() + 1 if batch.numel() > 0 else 0
+        if B == 0:
+            logger.debug("PFAS: Empty batch, returning default grid")
+            return torch.ones_like(coord) * self.grid_size_options[1][0]  # 背景网格默认值
 
-        K = 32
-        B = batch.max().item() + 1
-        linearity = []
-        density = []
+        # 优化1：批量处理所有batch，避免for循环遍历batch
+        # 1. 生成batch掩码矩阵（B x N）
+        batch_mask = (batch.unsqueeze(0) == torch.arange(B, device=batch.device).unsqueeze(1)).float()
+        # 2. 计算每个点的近邻（批量KNN，替代逐batch cdist）
+        # 全局距离矩阵（N x N）→ 按batch掩码过滤非本batch点
+        dist = torch.cdist(coord, coord)
+        dist = dist * batch_mask.T  # 非本batch点的距离设为0，后续用inf屏蔽
+        dist[dist == 0] = torch.inf  # 屏蔽自身和非本batch点
+        # 批量找近邻（N x K）
+        _, idx = torch.topk(dist, self.K, largest=False)  # 优化：K从32→16
 
-        logger.debug(f"PFAS processing {B} batches with K={K}")
+        # 3. 批量提取近邻坐标（N x K x 3）
+        neighbor_coords = coord[idx]  # 利用索引批量获取，替代逐点循环
+        # 中心化（N x K x 3）
+        neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)
 
-        for b in range(B):
-            batch_start = time.time()
-            mask = batch == b
-            mask_sum = mask.sum().item()
-            logger.debug(f"Processing batch {b}/{B} - {mask_sum} points")
+        # 优化2：批量计算协方差和PCA（向量化操作，无Python循环）
+        # 协方差矩阵：N x 3 x 3（替代逐点计算）
+        cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)
+        # SVD分解（批量处理，N x 3 x 3）
+        U, S, V = torch.svd(cov.float())  # 用float降低计算精度，加速且省内存
+        S = S.to(feat.dtype)
+        # 归一化特征值（N x 3）
+        S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)
 
-            if mask_sum < K:
-                logger.debug(f"Batch {b} has fewer points than K={K}, skipping PCA")
-                linearity.append(torch.zeros(mask_sum, device=feat.device))
-                density.append(torch.zeros(mask_sum, device=feat.device))
-                continue
+        # 计算线性度（N x 1）
+        linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)
 
-            points_b = coord[mask]
-            dist_start = time.time()
-            dist = torch.cdist(points_b, points_b)
-            logger.debug(f"Batch {b} cdist took {time.time() - dist_start:.4f}s - dist shape: {dist.shape}")
+        # 4. 批量计算密度（N x 1）
+        neighbor_dists = dist.gather(1, idx)  # N x K
+        mean_dist = neighbor_dists.mean(dim=1, keepdim=True)
+        density = 1.0 / (mean_dist + 1e-6)
 
-            topk_start = time.time()
-            _, idx = torch.topk(dist, K + 1, largest=False)
-            idx = idx[:, 1:K + 1]  # 排除自身
-            logger.debug(f"Batch {b} topk took {time.time() - topk_start:.4f}s - idx shape: {idx.shape}")
+        logger.debug(f"PFAS: PCA and density calculation took {time.time() - start_time:.4f}s")
 
-            pca_features = []
-            pca_total = 0
-            for i in range(points_b.shape[0]):
-                pca_start = time.time()
-                neighbors = points_b[idx[i]]
-                centered = neighbors - neighbors.mean(dim=0)
-
-                # SVD计算
-                cov = torch.matmul(centered.T, centered) / (K - 1)
-                cov_float = cov.to(torch.float32)
-                eigenvalues = torch.svd(cov_float).S
-                eigenvalues = eigenvalues.to(feat.dtype)
-                eigenvalues = eigenvalues / eigenvalues.sum()
-                pca_features.append(eigenvalues)
-
-                pca_total += time.time() - pca_start
-                # 每1000个点打印一次进度
-                if (i + 1) % 1000 == 0:
-                    logger.debug(f"Batch {b} PCA progress: {i + 1}/{points_b.shape[0]} points")
-
-            logger.debug(
-                f"Batch {b} PCA total time: {pca_total:.4f}s - avg per point: {pca_total / points_b.shape[0]:.6f}s")
-
-            pca_features = torch.stack(pca_features)
-            linearness = pca_features[:, 0] - (pca_features[:, 1] + pca_features[:, 2])
-            linearity.append(linearness)
-
-            # 计算密度
-            density_start = time.time()
-            row_indices = torch.arange(points_b.shape[0], device=dist.device).unsqueeze(1)
-            neighbor_dists = dist[row_indices, idx]
-            mean_dist = neighbor_dists.mean(dim=1)
-            density_val = 1.0 / (mean_dist + 1e-6)
-            density.append(density_val)
-            logger.debug(f"Batch {b} density calculation took {time.time() - density_start:.4f}s")
-
-            logger.debug(f"Batch {b} total time: {time.time() - batch_start:.4f}s")
-
-        # 合并结果
-        merge_start = time.time()
-        linearity = torch.cat(linearity, dim=0)
-        density = torch.cat(density, dim=0)
-        logger.debug(f"Merging results took {time.time() - merge_start:.4f}s")
-
-        # 特征判断
+        # 特征判断（与原逻辑一致，并行操作）
         judge_start = time.time()
         feat_logits = self.feature_judge(feat)
-        feat_probs = F.softmax(feat_logits, dim=1)
-        logger.debug(f"Feature judgment took {time.time() - judge_start:.4f}s")
+        feat_probs = F.softmax(feat_logits, dim=1)  # N x 3
 
-        # 计算概率
-        prob_start = time.time()
-        tower_prob = (density.unsqueeze(1) * 2.0 + feat_probs[:, 0:1]) / 3.0
-        background_prob = (torch.maximum(1.0 - linearity.unsqueeze(1), 1.0 - density.unsqueeze(1)) + feat_probs[:,
-                                                                                                     1:2]) / 3.0
-        line_prob = (linearity.unsqueeze(1) * 2.0 + feat_probs[:, 2:3]) / 3.0
-        logger.debug(f"Probability calculation took {time.time() - prob_start:.4f}s")
+        # 计算类别概率（批量操作）
+        tower_prob = (density * 2.0 + feat_probs[:, 0:1]) / 3.0
+        background_prob = (torch.maximum(1.0 - linearity, 1.0 - density) + feat_probs[:, 1:2]) / 3.0
+        line_prob = (linearity * 2.0 + feat_probs[:, 2:3]) / 3.0
 
-        # 生成网格大小
+        # 生成动态网格（批量计算，N x 3）
         grid_start = time.time()
-        grid_sizes = torch.zeros_like(coord)
-        for i in range(3):
+        grid_sizes = torch.zeros_like(coord, device=coord.device)
+        for i in range(3):  # 遍历x/y/z轴
             tower_grid = self.grid_size_options[0][i]
             background_grid = self.grid_size_options[1][i]
             line_grid = self.grid_size_options[2][i] if i < 2 else self.grid_size_options[2][i] * 5
-
             grid_sizes[:, i] = (
-                    tower_prob[:, 0] * tower_grid +
-                    background_prob[:, 0] * background_grid +
-                    line_prob[:, 0] * line_grid + 1e-6
+                tower_prob[:, 0] * tower_grid +
+                background_prob[:, 0] * background_grid +
+                line_prob[:, 0] * line_grid + 1e-6
             )
-        logger.debug(f"Grid size calculation took {time.time() - grid_start:.4f}s")
 
         logger.debug(
             f"PFAS forward complete - total time: {time.time() - start_time:.4f}s - output shape: {grid_sizes.shape}")
         return grid_sizes
 
 
-# 策略2: 跨模态电力特征增强（CMPFE）
+# 策略2: 跨模态电力特征增强（CMPFE）- 保持原逻辑，并行高效
 class CMPFEModule(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.in_channels = in_channels
-
         self.feature_projection = nn.Sequential(
             nn.Linear(in_channels, 9),
             nn.BatchNorm1d(9),
             nn.ReLU()
         )
-
         self.color_attention = nn.Sequential(
             nn.Linear(3, 16),
             nn.ReLU(),
             nn.Linear(16, 3),
             nn.Sigmoid()
         )
-
         self.normal_attention = nn.Sequential(
             nn.Linear(3, 16),
             nn.ReLU(),
             nn.Linear(16, 3),
             nn.Sigmoid()
         )
-
         self.feature_fusion = nn.Sequential(
             nn.Linear(9, in_channels),
             nn.BatchNorm1d(in_channels),
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
         )
-
         self.semantic_attention = nn.Sequential(
             nn.Linear(in_channels, in_channels // 2),
             nn.ReLU(),
@@ -183,36 +139,20 @@ class CMPFEModule(nn.Module):
     def forward(self, x):
         start_time = time.time()
         logger.debug(f"CMPFE forward start - input shape: {x.shape}")
-
-        # 特征投影
-        proj_start = time.time()
+        # 所有操作均为并行批量计算，无优化空间（已最优）
         projected_feat = self.feature_projection(x)
-        logger.debug(f"Feature projection took {time.time() - proj_start:.4f}s - shape: {projected_feat.shape}")
-
-        # 特征分离
-        split_start = time.time()
         coord_feat = projected_feat[:, :3]
         color_feat = projected_feat[:, 3:6]
         normal_feat = projected_feat[:, 6:9]
-        logger.debug(f"Feature splitting took {time.time() - split_start:.4f}s")
 
-        # 注意力计算
-        att_start = time.time()
         enhanced_color = color_feat * self.color_attention(color_feat)
         enhanced_normal = normal_feat * self.normal_attention(normal_feat)
-        logger.debug(f"Attention calculation took {time.time() - att_start:.4f}s")
 
-        # 特征融合
-        fuse_start = time.time()
         enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
         fused_feat = self.feature_fusion(enhanced_feat)
-        logger.debug(f"Feature fusion took {time.time() - fuse_start:.4f}s")
 
-        # 语义注意力
-        sem_start = time.time()
         sem_att = self.semantic_attention(fused_feat)
         final_feat = fused_feat * sem_att + x * (1 - sem_att)
-        logger.debug(f"Semantic attention took {time.time() - sem_start:.4f}s")
 
         logger.debug(
             f"CMPFE forward complete - total time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}")
@@ -239,9 +179,7 @@ class BasicBlock(nn.Module):
         self.grid_size = grid_size
         self.weight = nn.ModuleList()
         self.l_w = nn.ModuleList()
-
-        self.cmpfe = CMPFEModule(embed_channels)
-
+        self.cmpfe = CMPFEModule(embed_channels)  # 调用优化后的CMPFE（无变化）
         self.proj.append(
             nn.Sequential(
                 nn.Linear(embed_channels, embed_channels, bias=False),
@@ -265,7 +203,6 @@ class BasicBlock(nn.Module):
                 )
             )
             self.weight.append(nn.Linear(embed_channels, embed_channels, bias=False))
-
         self.adaptive = nn.Linear(embed_channels, depth - 1, bias=False)
         self.fuse = nn.Sequential(
             nn.Linear(embed_channels * 2, embed_channels, bias=False),
@@ -296,64 +233,52 @@ class BasicBlock(nn.Module):
             norm_fn(embed_channels),
         )
         self.act = nn.ReLU()
-
-        self.pfas = PFASModule(embed_channels, grid_size)
+        self.pfas = PFASModule(embed_channels, grid_size)  # 调用优化后的PFAS
 
     def forward(self, x, clusters=None):
-        block_id = id(self) % 1000  # 简单的块标识
+        block_id = id(self) % 1000
         start_time = time.time()
         logger.debug(
             f"BasicBlock {block_id} forward start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}")
 
-        # CMPFE特征增强
-        cmpfe_start = time.time()
+        # 调用优化后的CMPFE和PFAS
         enhanced_feat = self.cmpfe(x.features)
         x = x.replace_feature(enhanced_feat)
         feat = x.features
-        logger.debug(f"BasicBlock {block_id} CMPFE took {time.time() - cmpfe_start:.4f}s")
 
-        # PFAS动态网格生成
-        pfas_start = time.time()
         coord = x.indices[:, 1:].float()
         batch = x.indices[:, 0]
-        dynamic_grid_sizes = self.pfas(feat, coord, batch)
-        logger.debug(f"BasicBlock {block_id} PFAS took {time.time() - pfas_start:.4f}s")
+        dynamic_grid_sizes = self.pfas(feat, coord, batch)  # 优化后的PFAS
 
         if dynamic_grid_sizes.numel() == 0:
             logger.debug(f"BasicBlock {block_id} empty input, returning early")
             return x
 
-        # 生成代表性网格
-        grid_start = time.time()
+        # 网格生成逻辑简化（保留原逻辑，无优化）
         grid_mean = dynamic_grid_sizes.mean(dim=1)
-        representative_grids = [
-            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[100:200]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 200 else grid_mean.mean() * 0.8,
-            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:100]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 100 else grid_mean.mean() * 1.2,
-            torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[:100]], dim=0)
-            if dynamic_grid_sizes.shape[0] > 100 else grid_mean.mean() * 0.5
-        ]
-        logger.debug(f"BasicBlock {block_id} representative grids took {time.time() - grid_start:.4f}s")
+        representative_grids = []
+        if dynamic_grid_sizes.shape[0] > 200:
+            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[100:200]], dim=0))
+        else:
+            representative_grids.append(grid_mean.mean() * 0.8)
+        if dynamic_grid_sizes.shape[0] > 100:
+            representative_grids.append(
+                torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:100]], dim=0))
+            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[:100]], dim=0))
+        else:
+            representative_grids.append(grid_mean.mean() * 1.2)
+            representative_grids.append(grid_mean.mean() * 0.5)
 
-        # 生成多尺度聚类
-        cluster_start = time.time()
+        # 聚类和融合逻辑（保留原逻辑，无优化）
         clusters = []
         for i, grid_size in enumerate(representative_grids):
             cluster = voxel_grid(pos=coord, size=torch.clamp(grid_size, min=1e-6).tolist(), batch=batch)
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
-            logger.debug(f"BasicBlock {block_id} cluster {i} shape: {cluster.shape}")
-        logger.debug(f"BasicBlock {block_id} clustering took {time.time() - cluster_start:.4f}s")
 
-        # 多尺度特征融合
-        fusion_start = time.time()
         feats = []
         valid_depth = min(len(self.l_w), len(clusters))
-        logger.debug(f"BasicBlock {block_id} starting fusion with valid_depth={valid_depth}")
-
         for i in range(valid_depth):
-            fuse_i_start = time.time()
             cluster = clusters[i]
             pw = self.l_w[i](feat)
             pw = pw - scatter(pw, cluster, reduce="mean")[cluster]
@@ -363,14 +288,11 @@ class BasicBlock(nn.Module):
             pfeat = self.proj[i](feat) * pw
             pfeat = scatter(pfeat, cluster, reduce="sum")[cluster]
             feats.append(pfeat)
-            logger.debug(f"BasicBlock {block_id} fusion step {i} took {time.time() - fuse_i_start:.4f}s")
 
         if not feats:
             logger.debug(f"BasicBlock {block_id} no features for fusion, returning early")
             return x
 
-        # 自适应融合
-        adp_start = time.time()
         adp = self.adaptive(feat)
         adp = torch.softmax(adp, dim=1)
         feats = torch.stack(feats, dim=1)
@@ -379,14 +301,10 @@ class BasicBlock(nn.Module):
         feat = torch.cat([feat, feats], dim=1)
         feat = self.fuse(feat) + x.features
         res = feat
-        logger.debug(f"BasicBlock {block_id} adaptive fusion took {time.time() - adp_start:.4f}s")
 
-        # 稀疏卷积处理
-        conv_start = time.time()
         x = x.replace_feature(feat)
         x = self.voxel_block(x)
         x = x.replace_feature(self.act(x.features + res))
-        logger.debug(f"BasicBlock {block_id} convolution took {time.time() - conv_start:.4f}s")
 
         logger.debug(f"BasicBlock {block_id} forward complete - total time: {time.time() - start_time:.4f}s")
         return x
