@@ -41,20 +41,17 @@ class PFASModule(nn.Module):
             points_b = coord[mask]
             dist = torch.cdist(points_b, points_b)
             _, idx = torch.topk(dist, K + 1, largest=False)
-            idx = idx[:, 1:K + 1]  # 排除自身
+            idx = idx[:, 1:K + 1]  # 排除自身，形状为[N, 32]
 
             pca_features = []
             for i in range(points_b.shape[0]):
                 neighbors = points_b[idx[i]]
                 centered = neighbors - neighbors.mean(dim=0)
 
-                # 关键修复：将协方差矩阵转换为float32进行SVD计算
+                # 将协方差矩阵转换为float32进行SVD计算
                 cov = torch.matmul(centered.T, centered) / (K - 1)
-                # 转换为float32以支持CUDA上的SVD操作
                 cov_float = cov.to(torch.float32)
-                # 执行SVD
                 eigenvalues = torch.svd(cov_float).S
-                # 转回原始数据类型
                 eigenvalues = eigenvalues.to(feat.dtype)
 
                 eigenvalues = eigenvalues / eigenvalues.sum()
@@ -64,7 +61,12 @@ class PFASModule(nn.Module):
             linearness = pca_features[:, 0] - (pca_features[:, 1] + pca_features[:, 2])
             linearity.append(linearness)
 
-            mean_dist = dist[torch.arange(points_b.shape[0]), idx].mean(dim=1)
+            # 关键修复：使用正确的索引方式计算平均距离
+            # 创建适合的行索引，形状为[N, 1]以匹配idx的[N, 32]
+            row_indices = torch.arange(points_b.shape[0], device=dist.device).unsqueeze(1)
+            # 现在可以正确索引，获取每个点的K个最近邻的距离
+            neighbor_dists = dist[row_indices, idx]  # 形状为[N, 32]
+            mean_dist = neighbor_dists.mean(dim=1)  # 形状为[N]
             density_val = 1.0 / (mean_dist + 1e-6)
             density.append(density_val)
 
