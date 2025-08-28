@@ -90,7 +90,7 @@ data = dict(
                 return_min_coord=True,
             ),
             dict(type="SphereCrop", sample_rate=0.8, mode="random"),
-            dict(type="SphereCrop", point_max=10000, mode="random"),
+            dict(type="SphereCrop", point_max=5000, mode="random"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),       # 颜色归一化（适配CMPFE颜色注意力）
             # dict(type="NormalizeNormal"),      # 新增：法向量归一化（CMPFE需稳定的法向量输入）
