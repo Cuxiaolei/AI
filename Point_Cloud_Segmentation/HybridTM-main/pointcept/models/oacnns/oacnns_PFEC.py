@@ -47,8 +47,16 @@ class PFASModule(nn.Module):
             for i in range(points_b.shape[0]):
                 neighbors = points_b[idx[i]]
                 centered = neighbors - neighbors.mean(dim=0)
+
+                # 关键修复：将协方差矩阵转换为float32进行SVD计算
                 cov = torch.matmul(centered.T, centered) / (K - 1)
-                eigenvalues = torch.svd(cov).S
+                # 转换为float32以支持CUDA上的SVD操作
+                cov_float = cov.to(torch.float32)
+                # 执行SVD
+                eigenvalues = torch.svd(cov_float).S
+                # 转回原始数据类型
+                eigenvalues = eigenvalues.to(feat.dtype)
+
                 eigenvalues = eigenvalues / eigenvalues.sum()
                 pca_features.append(eigenvalues)
 
