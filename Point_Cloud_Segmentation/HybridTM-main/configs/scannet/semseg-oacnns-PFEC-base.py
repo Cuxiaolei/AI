@@ -94,7 +94,7 @@ data = dict(
             dict(type="SphereCrop", point_max=10000, mode="random"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),       # 颜色归一化（适配CMPFE颜色注意力）
-            dict(type="NormalizeNormal"),      # 新增：法向量归一化（CMPFE需稳定的法向量输入）
+            # dict(type="NormalizeNormal"),      # 新增：法向量归一化（CMPFE需稳定的法向量输入）
             dict(type="ShufflePoint"),
             dict(type="ToTensor"),
             # 关键调整：feat_keys顺序与输入通道一致（coord3 + normal3 + color3）
@@ -122,7 +122,7 @@ data = dict(
             ),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
-            dict(type="NormalizeNormal"),  # 新增：法向量归一化
+            # dict(type="NormalizeNormal"),  # 新增：法向量归一化
             dict(type="ToTensor"),
             dict(
                 type="Collect",
@@ -139,7 +139,7 @@ data = dict(
         transform=[
             dict(type="CenterShift", apply_z=True),
             dict(type="NormalizeColor"),
-            dict(type="NormalizeNormal"),  # 新增：法向量归一化
+            # dict(type="NormalizeNormal"),  # 新增：法向量归一化
         ],
         test_mode=True,
         test_cfg=dict(
