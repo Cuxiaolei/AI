@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..builder import LOSSES
+from .builder import LOSSES
 
 
 @LOSSES.register_module()
