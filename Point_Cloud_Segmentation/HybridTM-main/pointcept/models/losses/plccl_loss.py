@@ -16,6 +16,7 @@ class PLCCLoss(nn.Module):
         self.loss_weight = loss_weight
         self.requires_coords = True
 
+
     def forward(self, features, labels, coords):
         start_time = time.time()
         logger.debug(
