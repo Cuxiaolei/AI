@@ -9,13 +9,13 @@ import time
 @LOSSES.register_module()
 # 策略3: 电力线连续性约束对比学习（PLCCL）
 class PLCCLoss(nn.Module):
-    def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0):
+    def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0, ignore_index=-1):
         super().__init__()
         self.temperature = temperature
         self.gamma = gamma
         self.loss_weight = loss_weight
         self.requires_coords = True
-
+        self.ignore_index = ignore_index
 
     def forward(self, features, labels, coords):
         start_time = time.time()
