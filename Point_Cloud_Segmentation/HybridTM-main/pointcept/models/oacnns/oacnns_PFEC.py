@@ -463,6 +463,7 @@ class PLCCLoss(nn.Module):
         self.temperature = temperature
         self.gamma = gamma
         self.loss_weight = loss_weight
+        self.requires_coords = True
 
     def forward(self, features, labels, coords):
         start_time = time.time()
