@@ -43,11 +43,11 @@ class DefaultSegmentor(nn.Module):
 @MODELS.register_module()
 class DefaultSegmentorV2(nn.Module):
     def __init__(
-        self,
-        num_classes,
-        backbone_out_channels,
-        backbone=None,
-        criteria=None,
+            self,
+            num_classes,
+            backbone_out_channels,
+            backbone=None,
+            criteria=None,
     ):
         super().__init__()
         self.seg_head = (
@@ -56,7 +56,7 @@ class DefaultSegmentorV2(nn.Module):
             else nn.Identity()
         )
         self.backbone = build_model(backbone)
-        self.criteria = build_criteria(criteria)
+        self.criteria = build_criteria(criteria)  # 此处 criteria 是你修改后的 Criteria 实例
 
     def forward(self, input_dict):
         point = Point(input_dict)
@@ -68,27 +68,32 @@ class DefaultSegmentorV2(nn.Module):
         else:
             feat = point
         seg_logits = self.seg_head(feat)
-        # train
+
+        # -------------------------- 核心修改部分 --------------------------
+        # 1. 训练模式：传递 input_dict 给 Criteria，支持多损失（含 PLCCLoss）
         if self.training:
-            # 检查是否需要坐标参数
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            # 直接传递 seg_logits + 标签 + 完整 input_dict（让 Criteria 内部判断是否需要坐标）
+            loss = self.criteria(
+                pred=seg_logits,
+                target=input_dict["segment"],
+                input_dict=input_dict  # 关键：传递完整输入字典，包含 coord 等数据
+            )
             loss = torch.nan_to_num(loss)
             return dict(loss=loss)
-        # eval
+
+        # 2. 验证模式：同训练模式，需计算损失用于评估
         elif "segment" in input_dict.keys():
-            if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
-            else:
-                loss = self.criteria(seg_logits, input_dict["segment"])
+            loss = self.criteria(
+                pred=seg_logits,
+                target=input_dict["segment"],
+                input_dict=input_dict
+            )
             loss = torch.nan_to_num(loss)
             return dict(loss=loss, seg_logits=seg_logits)
-        # test
+
+        # 3. 测试模式：无标签，不计算损失
         else:
             return dict(seg_logits=seg_logits)
-
 
 @MODELS.register_module()
 class DefaultClassifier(nn.Module):
