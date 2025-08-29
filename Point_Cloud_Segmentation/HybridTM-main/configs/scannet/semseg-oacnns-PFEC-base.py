@@ -96,12 +96,12 @@ data = dict(
             # dict(type="NormalizeNormal"),      # 新增：法向量归一化（CMPFE需稳定的法向量输入）
             dict(type="ShufflePoint"),
             dict(type="ToTensor"),
-            # 关键调整：feat_keys顺序与输入通道一致（coord3 + normal3 + color3）
+            dict(type='Rename', mapping={'coord': 'coord_feat'}),  # 新增：复制 coord 为 coord_feat
             dict(
-                type="Collect",
-                keys=("coord", "grid_coord", "segment"),  # segment为标签（电力塔0/背景1/电力线2）
-                feat_keys=("coord", "normal", "color"),   # 输入特征顺序，与模型in_channels对应
-            ),
+                type='Collect',
+                keys=('coord', 'grid_coord', 'segment'),  # 根目录保留原始 coord（供 PLCCLoss）
+                feat_keys=('coord_feat', 'normal', 'color')  # feat 中用 coord_feat（供模型）
+            )
         ],
         test_mode=False,
     ),
@@ -123,10 +123,11 @@ data = dict(
             dict(type="NormalizeColor"),
             # dict(type="NormalizeNormal"),  # 新增：法向量归一化
             dict(type="ToTensor"),
+            dict(type='Rename', mapping={'coord': 'coord_feat'}),
             dict(
-                type="Collect",
-                keys=("coord", "grid_coord", "segment"),
-                feat_keys=("coord", "normal", "color"),  # 与训练一致的特征顺序
+                type='Collect',
+                keys=('coord', 'grid_coord', 'segment'),  # 根目录保留 coord（供 PLCCLoss）
+                feat_keys=('coord_feat', 'normal', 'color')  # feat 用 coord_feat（供模型）
             ),
         ],
         test_mode=False,
@@ -154,10 +155,11 @@ data = dict(
             post_transform=[
                 dict(type="CenterShift", apply_z=False),
                 dict(type="ToTensor"),
+                dict(type='Rename', mapping={'coord': 'coord_feat'}),
                 dict(
-                    type="Collect",
-                    keys=("coord", "grid_coord", "index"),
-                    feat_keys=("coord", "normal", "color"),
+                    type='Collect',
+                    keys=('grid_coord', 'segment'),
+                    feat_keys=('coord', 'normal', 'color')  # feat 用 coord_feat（供模型）
                 ),
             ],
             # 测试增强：保持原配置（仅z轴0角度旋转，可根据需求增加其他角度）
