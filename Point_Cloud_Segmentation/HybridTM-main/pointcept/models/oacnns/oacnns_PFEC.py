@@ -229,6 +229,7 @@ class BasicBlock(nn.Module):
                 )
             )
             self.weight.append(nn.Linear(embed_channels, embed_channels, bias=False))
+        # 修复：adaptive层输出维度应与聚类数量匹配
         self.adaptive = nn.Linear(embed_channels, depth - 1, bias=False)
         self.fuse = nn.Sequential(
             nn.Linear(embed_channels * 2, embed_channels, bias=False),
@@ -317,10 +318,17 @@ class BasicBlock(nn.Module):
             logger.debug(f"BasicBlock {block_id} no features for fusion, returning early")
             return x
 
+        # 修复：确保adaptive输出维度与feats数量一致
         adp = self.adaptive(feat)
+        # 只取与feats数量匹配的维度
+        adp = adp[:, :len(feats)]
         adp = torch.softmax(adp, dim=1)
+
+        # 修复einsum维度不匹配问题
         feats = torch.stack(feats, dim=1)
+        # 使用正确的维度进行 einsum 运算
         feats = torch.einsum("nc, ncd -> nd", adp, feats)
+
         feat = self.proj[-1](feat)
         feat = torch.cat([feat, feats], dim=1)
         feat = self.fuse(feat) + x.features
