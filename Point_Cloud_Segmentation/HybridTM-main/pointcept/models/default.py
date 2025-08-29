@@ -16,16 +16,16 @@ class DefaultSegmentor(nn.Module):
 
     def forward(self, input_dict):
         # 验证 input_dict 中的 coord（保留日志，便于调试）
-        if "coord" in input_dict:
-            print(f"[Segmentor] input_dict 有 coord，shape: {input_dict['coord'].shape}")
-        else:
-            print(f"[Segmentor] input_dict 无 coord！当前键: {list(input_dict.keys())}")
-
-        # 验证 criteria 是否需要坐标（保留日志）
-        if hasattr(self.criteria, 'requires_coords'):
-            print(f"[Segmentor] criteria.requires_coords: {self.criteria.requires_coords}")
-        else:
-            print(f"[Segmentor] criteria 无 requires_coords 属性！")
+        # if "coord" in input_dict:
+        #     print(f"[Segmentor] input_dict 有 coord，shape: {input_dict['coord'].shape}")
+        # else:
+        #     print(f"[Segmentor] input_dict 无 coord！当前键: {list(input_dict.keys())}")
+        #
+        # # 验证 criteria 是否需要坐标（保留日志）
+        # if hasattr(self.criteria, 'requires_coords'):
+        #     print(f"[Segmentor] criteria.requires_coords: {self.criteria.requires_coords}")
+        # else:
+        #     print(f"[Segmentor] criteria 无 requires_coords 属性！")
 
         if "condition" in input_dict.keys():
             input_dict["condition"] = input_dict["condition"][0]
