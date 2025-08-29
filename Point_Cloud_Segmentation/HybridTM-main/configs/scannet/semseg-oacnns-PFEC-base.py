@@ -44,7 +44,7 @@ model = dict(
 )
 
 # 训练参数：保持原配置逻辑，适配改进模型复杂度
-epoch = 100  # 总训练轮次，可根据收敛情况调整（改进模型可能需120-150轮）
+epoch = 3  # 总训练轮次，可根据收敛情况调整（改进模型可能需120-150轮）
 optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.02)  # AdamW优化器，抑制过拟合
 scheduler = dict(
     type="OneCycleLR",  # OneCycle学习率调度，快速收敛且泛化性好
