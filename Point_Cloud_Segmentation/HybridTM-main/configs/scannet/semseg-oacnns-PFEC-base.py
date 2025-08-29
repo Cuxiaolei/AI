@@ -121,6 +121,8 @@ data = dict(
             ),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
+            # 新增：验证阶段裁剪点云（与训练保持相似规模）
+            dict(type='SphereCrop', point_max=50000, mode='center'),  # 限制最大5万个点
             # dict(type="NormalizeNormal"),  # 新增：法向量归一化
             dict(type="ToTensor"),
             dict(
