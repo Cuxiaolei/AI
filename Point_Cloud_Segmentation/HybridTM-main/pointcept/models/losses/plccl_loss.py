@@ -13,6 +13,7 @@ logger.setLevel(logging.DEBUG)
 
 @LOSSES.register_module()
 class PLCCLoss(nn.Module):
+    need_coord = True  # 新增：标记该损失需要 coord
     def __init__(self, temperature=0.1, gamma=0.5, loss_weight=1.0, ignore_index=-1):
         super().__init__()
         self.temperature = temperature
