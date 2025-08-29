@@ -96,11 +96,10 @@ data = dict(
             # dict(type="NormalizeNormal"),      # 新增：法向量归一化（CMPFE需稳定的法向量输入）
             dict(type="ShufflePoint"),
             dict(type="ToTensor"),
-            dict(type='Rename', mapping={'coord': 'coord_feat'}),  # 新增：复制 coord 为 coord_feat
             dict(
                 type='Collect',
                 keys=('coord', 'grid_coord', 'segment'),  # 根目录保留原始 coord（供 PLCCLoss）
-                feat_keys=('coord_feat', 'normal', 'color')  # feat 中用 coord_feat（供模型）
+                feat_keys=('coord', 'normal', 'color')  # feat 中用 coord_feat（供模型）
             )
         ],
         test_mode=False,
@@ -123,11 +122,10 @@ data = dict(
             dict(type="NormalizeColor"),
             # dict(type="NormalizeNormal"),  # 新增：法向量归一化
             dict(type="ToTensor"),
-            dict(type='Rename', mapping={'coord': 'coord_feat'}),
             dict(
                 type='Collect',
                 keys=('coord', 'grid_coord', 'segment'),  # 根目录保留 coord（供 PLCCLoss）
-                feat_keys=('coord_feat', 'normal', 'color')  # feat 用 coord_feat（供模型）
+                feat_keys=('coord', 'normal', 'color')  # feat 用 coord_feat（供模型）
             ),
         ],
         test_mode=False,
