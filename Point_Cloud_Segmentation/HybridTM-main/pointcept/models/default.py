@@ -15,40 +15,41 @@ class DefaultSegmentor(nn.Module):
         self.criteria = build_criteria(criteria)
 
     def forward(self, input_dict):
-        # 新增日志 1：验证 input_dict 是否有 coord
+        # 验证 input_dict 中的 coord（保留日志，便于调试）
         if "coord" in input_dict:
             print(f"[Segmentor] input_dict 有 coord，shape: {input_dict['coord'].shape}")
         else:
             print(f"[Segmentor] input_dict 无 coord！当前键: {list(input_dict.keys())}")
 
-        # 新增日志 2：验证 criteria.requires_coords 是否为 True
+        # 验证 criteria 是否需要坐标（保留日志）
         if hasattr(self.criteria, 'requires_coords'):
             print(f"[Segmentor] criteria.requires_coords: {self.criteria.requires_coords}")
         else:
             print(f"[Segmentor] criteria 无 requires_coords 属性！")
 
-
         if "condition" in input_dict.keys():
-            # PPT (https://arxiv.org/abs/2308.09718)
-            # currently, only support one batch one condition
             input_dict["condition"] = input_dict["condition"][0]
         seg_logits = self.backbone(input_dict)
-        # train
+
+        # train 阶段：修改传参，第三个参数传 input_dict（完整字典）
         if self.training:
-            # 检查是否需要坐标参数
             if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
+                # 正确传参：seg_logits（预测）、input_dict["segment"]（标签）、input_dict（完整字典）
+                loss = self.criteria(seg_logits, input_dict["segment"], input_dict)
             else:
                 loss = self.criteria(seg_logits, input_dict["segment"])
             return dict(loss=loss)
-        # eval
+
+        # eval 阶段：同样修改传参，传递完整 input_dict
         elif "segment" in input_dict.keys():
             if hasattr(self.criteria, 'requires_coords') and self.criteria.requires_coords:
-                loss = self.criteria(seg_logits, input_dict["segment"], input_dict["coord"])
+                # 正确传参：第三个参数是 input_dict（字典），而非 input_dict["coord"]（Tensor）
+                loss = self.criteria(seg_logits, input_dict["segment"], input_dict)
             else:
                 loss = self.criteria(seg_logits, input_dict["segment"])
             return dict(loss=loss, seg_logits=seg_logits)
-        # test
+
+        # test 阶段：无标签，无需计算损失
         else:
             return dict(seg_logits=seg_logits)
 
