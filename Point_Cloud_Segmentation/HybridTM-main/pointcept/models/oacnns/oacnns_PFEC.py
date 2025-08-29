@@ -16,17 +16,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# 策略1: 电力设施自适应尺度模块（PFAS）- 优化版
+# 策略1: 电力设施自适应尺度模块（PFAS）- 内存优化版
 class PFASModule(nn.Module):
-    def __init__(self, in_channels, grid_size_options, K=16):
+    def __init__(self, in_channels, grid_size_options, K=16):  # 保持K=16平衡精度与内存
         super().__init__()
         self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线]
-        self.K = K  # 保持小近邻数
+        self.K = K  # 近邻数保持适中
         self.feature_judge = nn.Sequential(
-            nn.Linear(in_channels, 64),
-            nn.BatchNorm1d(64),
+            nn.Linear(in_channels, 32),  # 缩减特征维度，降低内存占用
+            nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Linear(64, 3)  # 输出三类概率
+            nn.Linear(32, 3)  # 输出三类概率
         )
 
     def forward(self, feat, coord, batch):
@@ -39,75 +39,87 @@ class PFASModule(nn.Module):
             logger.debug("PFAS: Empty batch, returning default grid")
             return torch.ones_like(coord) * self.grid_size_options[1][0]
 
-        # -------------------------- 核心优化：分批次KNN（无[N,N]矩阵） --------------------------
-        # 1. 按batch分组处理，避免跨样本计算
         dynamic_grid_sizes = torch.zeros_like(coord, device=coord.device)
+        # 每个batch的最大处理点数（根据GPU内存调整）
+        max_points_per_batch = 20000
+        # KNN批次大小（进一步减小单次计算量）
+        knn_batch_size = 512
+
         for b in range(B):
-            # 提取当前batch的点（局部化，避免全量操作）
             batch_mask = (batch == b)
-            coord_b = coord[batch_mask]  # [N_b, 3]，N_b是当前batch的点数
-            feat_b = feat[batch_mask]    # [N_b, C]
+            coord_b = coord[batch_mask]  # [N_b, 3]
+            feat_b = feat[batch_mask]  # [N_b, C]
             N_b = coord_b.shape[0]
-            if N_b < self.K:  # 点数不足K时，直接用背景网格
+
+            if N_b < self.K:
                 dynamic_grid_sizes[batch_mask] = torch.tensor(self.grid_size_options[1], device=coord.device)
                 continue
 
-            # 2. 分批次KNN（避免一次性计算全量距离）
-            # 批次大小根据GPU内存调整（如1024，可根据实际情况修改）
-            batch_size_knn = 1024
-            idx_b = torch.zeros((N_b, self.K), dtype=torch.long, device=coord.device)
-            for i in range(0, N_b, batch_size_knn):
-                # 当前批次的坐标：[batch_size_knn, 3]
-                coord_batch = coord_b[i:i+batch_size_knn]
-                # 计算当前批次与所有batch内点的距离：[batch_size_knn, N_b]（而非[N,N]）
-                dist_batch = torch.cdist(coord_batch, coord_b)
-                # 屏蔽自身（对角线）
-                dist_batch[:, i:i+batch_size_knn] = torch.inf  # 只屏蔽当前批次的自身
-                # 取Top-K近邻索引
-                _, idx_batch = torch.topk(dist_batch, self.K, largest=False)
-                idx_b[i:i+batch_size_knn] = idx_batch
+            # 核心优化：拆分超大数据集，避免[N_b, N_b]矩阵
+            sub_batches = torch.split(torch.arange(N_b, device=coord.device), max_points_per_batch)
+            all_idx = torch.zeros((N_b, self.K), dtype=torch.long, device=coord.device)
+            all_dist = torch.zeros((N_b, self.K), dtype=coord.dtype, device=coord.device)
 
-            # -------------------------- 后续逻辑保持原功能（局部化处理） --------------------------
-            # 3. 近邻特征计算（基于局部索引）
-            neighbor_coords = coord_b[idx_b]  # [N_b, K, 3]
-            neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)  # 中心化
+            for sub_idx in sub_batches:
+                sub_size = len(sub_idx)
+                coord_sub = coord_b[sub_idx]  # [sub_size, 3]
 
-            # 4. 批量协方差与PCA（保持向量化，无循环）
-            cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)  # [N_b, 3, 3]
-            U, S, V = torch.svd(cov.float())  # 用float降低精度，省内存
+                # 分批次计算当前子batch与整个batch的距离
+                sub_idx_batch = torch.zeros((sub_size, self.K), dtype=torch.long, device=coord.device)
+                sub_dist_batch = torch.zeros((sub_size, self.K), dtype=coord.dtype, device=coord.device)
+
+                for i in range(0, sub_size, knn_batch_size):
+                    # 计算当前小批次与所有点的距离（[knn_batch_size, N_b]）
+                    current_batch = coord_sub[i:i + knn_batch_size]
+                    dist = torch.cdist(current_batch, coord_b)
+
+                    # 屏蔽自身
+                    original_indices = sub_idx[i:i + knn_batch_size]
+                    dist[torch.arange(len(original_indices)), original_indices] = torch.inf
+
+                    # 获取近邻索引和距离
+                    min_dist, min_idx = torch.topk(dist, self.K, largest=False)
+                    sub_dist_batch[i:i + knn_batch_size] = min_dist
+                    sub_idx_batch[i:i + knn_batch_size] = min_idx
+
+                # 保存当前子batch的结果
+                all_idx[sub_idx] = sub_idx_batch
+                all_dist[sub_idx] = sub_dist_batch
+
+            # 近邻特征计算（基于已有索引）
+            neighbor_coords = coord_b[all_idx]  # [N_b, K, 3]
+            neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)
+
+            # 协方差与PCA（使用float降低精度）
+            cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)
+            U, S, V = torch.svd(cov.float())  # 节省内存
             S = S.to(feat.dtype)
-            S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)  # [N_b, 3]
+            S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)
 
             # 线性度计算
-            linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)  # [N_b, 1]
+            linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)
 
-            # 5. 密度计算（基于局部距离）
-            # 提取当前batch内的近邻距离（避免全量dist矩阵）
-            neighbor_dists = torch.gather(
-                torch.cdist(coord_b, coord_b),  # 仅当前batch的距离矩阵：[N_b, N_b]（比全量小B倍）
-                dim=1,
-                index=idx_b
-            )  # [N_b, K]
-            mean_dist = neighbor_dists.mean(dim=1, keepdim=True)
-            density = 1.0 / (mean_dist + 1e-6)  # [N_b, 1]
+            # 密度计算（复用之前记录的距离）
+            mean_dist = all_dist.mean(dim=1, keepdim=True)
+            density = 1.0 / (mean_dist + 1e-6)
 
-            # 6. 特征判断与网格生成（局部化）
-            feat_logits = self.feature_judge(feat_b)  # [N_b, 3]
-            feat_probs = F.softmax(feat_logits, dim=1)  # [N_b, 3]
+            # 特征判断与网格生成
+            feat_logits = self.feature_judge(feat_b)
+            feat_probs = F.softmax(feat_logits, dim=1)
 
             tower_prob = (density * 2.0 + feat_probs[:, 0:1]) / 3.0
             background_prob = (torch.maximum(1.0 - linearity, 1.0 - density) + feat_probs[:, 1:2]) / 3.0
             line_prob = (linearity * 2.0 + feat_probs[:, 2:3]) / 3.0
 
-            # 生成当前batch的动态网格
-            for i_axis in range(3):  # x/y/z轴
+            # 生成动态网格
+            for i_axis in range(3):
                 tower_grid = self.grid_size_options[0][i_axis]
                 background_grid = self.grid_size_options[1][i_axis]
                 line_grid = self.grid_size_options[2][i_axis] if i_axis < 2 else self.grid_size_options[2][i_axis] * 5
                 dynamic_grid_sizes[batch_mask, i_axis] = (
-                    tower_prob[:, 0] * tower_grid +
-                    background_prob[:, 0] * background_grid +
-                    line_prob[:, 0] * line_grid + 1e-6
+                        tower_prob[:, 0] * tower_grid +
+                        background_prob[:, 0] * background_grid +
+                        line_prob[:, 0] * line_grid + 1e-6
                 )
 
         logger.debug(
@@ -115,31 +127,30 @@ class PFASModule(nn.Module):
         return dynamic_grid_sizes
 
 
-
-# 策略2: 跨模态电力特征增强（CMPFE）- 保持原逻辑，并行高效
+# 策略2: 跨模态电力特征增强（CMPFE）- 精简版
 class CMPFEModule(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
         self.in_channels = in_channels
         self.feature_projection = nn.Sequential(
-            nn.Linear(in_channels, 9),
-            nn.BatchNorm1d(9),
+            nn.Linear(in_channels, 6),  # 缩减投影维度
+            nn.BatchNorm1d(6),
             nn.ReLU()
         )
         self.color_attention = nn.Sequential(
-            nn.Linear(3, 16),
+            nn.Linear(2, 16),  # 适配缩减后的特征
             nn.ReLU(),
-            nn.Linear(16, 3),
+            nn.Linear(16, 2),
             nn.Sigmoid()
         )
         self.normal_attention = nn.Sequential(
-            nn.Linear(3, 16),
+            nn.Linear(2, 16),  # 适配缩减后的特征
             nn.ReLU(),
-            nn.Linear(16, 3),
+            nn.Linear(16, 2),
             nn.Sigmoid()
         )
         self.feature_fusion = nn.Sequential(
-            nn.Linear(9, in_channels),
+            nn.Linear(6, in_channels),  # 适配缩减后的特征
             nn.BatchNorm1d(in_channels),
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
@@ -154,11 +165,11 @@ class CMPFEModule(nn.Module):
     def forward(self, x):
         start_time = time.time()
         logger.debug(f"CMPFE forward start - input shape: {x.shape}")
-        # 所有操作均为并行批量计算，无优化空间（已最优）
+
         projected_feat = self.feature_projection(x)
-        coord_feat = projected_feat[:, :3]
-        color_feat = projected_feat[:, 3:6]
-        normal_feat = projected_feat[:, 6:9]
+        coord_feat = projected_feat[:, :2]  # 缩减为2维
+        color_feat = projected_feat[:, 2:4]  # 缩减为2维
+        normal_feat = projected_feat[:, 4:6]  # 缩减为2维
 
         enhanced_color = color_feat * self.color_attention(color_feat)
         enhanced_normal = normal_feat * self.normal_attention(normal_feat)
@@ -181,7 +192,7 @@ class BasicBlock(nn.Module):
             embed_channels,
             norm_fn=None,
             indice_key=None,
-            depth=4,
+            depth=3,  # 减少深度，降低内存
             groups=None,
             grid_size=None,
             bias=False,
@@ -194,7 +205,7 @@ class BasicBlock(nn.Module):
         self.grid_size = grid_size
         self.weight = nn.ModuleList()
         self.l_w = nn.ModuleList()
-        self.cmpfe = CMPFEModule(embed_channels)  # 调用优化后的CMPFE（无变化）
+        self.cmpfe = CMPFEModule(embed_channels)  # 调用精简版CMPFE
         self.proj.append(
             nn.Sequential(
                 nn.Linear(embed_channels, embed_channels, bias=False),
@@ -269,22 +280,20 @@ class BasicBlock(nn.Module):
             logger.debug(f"BasicBlock {block_id} empty input, returning early")
             return x
 
-        # 网格生成逻辑简化（保留原逻辑，无优化）
+        # 精简网格生成逻辑
         grid_mean = dynamic_grid_sizes.mean(dim=1)
         representative_grids = []
-        if dynamic_grid_sizes.shape[0] > 200:
-            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[100:200]], dim=0))
-        else:
-            representative_grids.append(grid_mean.mean() * 0.8)
+        # 减少聚类数量，降低计算量
         if dynamic_grid_sizes.shape[0] > 100:
+            # 仅保留2个代表性网格
+            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[50:100]], dim=0))
             representative_grids.append(
-                torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:100]], dim=0))
-            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[:100]], dim=0))
+                torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:50]], dim=0))
         else:
+            representative_grids.append(grid_mean.mean() * 1.0)
             representative_grids.append(grid_mean.mean() * 1.2)
-            representative_grids.append(grid_mean.mean() * 0.5)
 
-        # 聚类和融合逻辑（保留原逻辑，无优化）
+        # 聚类和融合逻辑
         clusters = []
         for i, grid_size in enumerate(representative_grids):
             cluster = voxel_grid(pos=coord, size=torch.clamp(grid_size, min=1e-6).tolist(), batch=batch)
@@ -391,15 +400,15 @@ class DownBlock(nn.Module):
 
 class UpBlock(nn.Module):
     def __init__(
-        self,
-        in_channels,
-        skip_channels,
-        embed_channels,
-        depth,
-        sp_indice_key,
-        norm_fn=None,
-        down_ratio=2,
-        sub_indice_key=None,
+            self,
+            in_channels,
+            skip_channels,
+            embed_channels,
+            depth,
+            sp_indice_key,
+            norm_fn=None,
+            down_ratio=2,
+            sub_indice_key=None,
     ):
         super().__init__()
         assert depth > 0
@@ -438,11 +447,11 @@ class OACNNs_PFEC(nn.Module):
             self,
             in_channels,
             num_classes,
-            embed_channels=64,
+            embed_channels=32,  # 降低嵌入维度
             enc_num_ref=[16, 16, 16, 16],
-            enc_channels=[64, 64, 128, 256],
+            enc_channels=[32, 32, 64, 128],  # 降低通道数
             groups=[2, 4, 8, 16],
-            enc_depth=[2, 3, 6, 4],
+            enc_depth=[2, 2, 4, 3],  # 减少深度
             down_ratio=[2, 2, 2, 2],
             dec_channels=[96, 96, 128, 256],
             point_grid_size=[[[3, 3, 3], [10, 10, 10], [1, 1, 5]],
@@ -538,7 +547,6 @@ class OACNNs_PFEC(nn.Module):
             skip = skips.pop(-1)
             x = self.dec[i](x, skip)
         x = self.final(x)
-        # 仅返回预测结果（logits），损失由框架外部根据配置计算
         return x.features
 
     @staticmethod
