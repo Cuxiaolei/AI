@@ -27,7 +27,7 @@ model = dict(
 )
 
 
-epoch = 100
+epoch = 3
 optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.02)
 scheduler = dict(
     type="OneCycleLR",
