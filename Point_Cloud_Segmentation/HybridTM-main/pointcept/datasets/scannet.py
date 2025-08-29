@@ -159,11 +159,11 @@ class ScanNetDataset(DefaultDataset):
             data_dict["sampled_index"] = sampled_index
 
         # 新增：打印加载的 coord 信息（关键验证）
-        if "coord" in data_dict:
-            print(
-                f"[Dataset] 成功加载 coord: 路径={data_path}, shape={data_dict['coord'].shape}, dtype={data_dict['coord'].dtype}")
-        else:
-            print(f"[Dataset] 未加载 coord: 路径={data_path}, 文件夹内文件={os.listdir(data_path)}")
+        # if "coord" in data_dict:
+        #     print(
+        #         f"[Dataset] 成功加载 coord: 路径={data_path}, shape={data_dict['coord'].shape}, dtype={data_dict['coord'].dtype}")
+        # else:
+        #     print(f"[Dataset] 未加载 coord: 路径={data_path}, 文件夹内文件={os.listdir(data_path)}")
 
         return data_dict
 

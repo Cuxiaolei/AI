@@ -59,13 +59,19 @@ class DefaultSegmentorV2(nn.Module):
         self.criteria = build_criteria(criteria)  # 此处 criteria 是你修改后的 Criteria 实例
 
     def forward(self, input_dict):
-        print(f"[DefaultSegmentorV2] input_dict 根目录键: {list(input_dict.keys())}")
+        # 新增：打印 Collect 后的 input_dict 根目录键（关键验证）
+        print(f"[Segmentor] input_dict keys after Collect: {list(input_dict.keys())}")
+        # 若 coord 存在，打印其形状
         if "coord" in input_dict:
-            print(f"[DefaultSegmentorV2] coord 存在，shape: {input_dict['coord'].shape}")
-        if "feat" in input_dict:
-            print(f"[DefaultSegmentorV2] feat 存在，shape: {input_dict['feat'].shape}")
+            print(f"[Segmentor] coord shape after Collect: {input_dict['coord'].shape}")
+        else:
+            print(f"[Segmentor] coord NOT found in input_dict after Collect!")
 
         point = Point(input_dict)
+        if hasattr(point, "coord"):
+            print(f"[Segmentor] Point.coord shape: {point.coord.shape}")
+        else:
+            print(f"[Segmentor] Point.coord NOT found!")
         point = self.backbone(point)
         # Backbone added after v1.5.0 return Point instead of feat and use DefaultSegmentorV2
         # TODO: remove this part after make all backbone return Point only.
