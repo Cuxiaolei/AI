@@ -18,10 +18,10 @@ logger.setLevel(logging.DEBUG)
 
 # 策略1: 电力设施自适应尺度模块（PFAS）- 优化版
 class PFASModule(nn.Module):
-    def __init__(self, in_channels, grid_size_options, K=16):  # 优化：K从32→16
+    def __init__(self, in_channels, grid_size_options, K=16):
         super().__init__()
         self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线]
-        self.K = K  # 近邻数减少，降低计算量
+        self.K = K  # 保持小近邻数
         self.feature_judge = nn.Sequential(
             nn.Linear(in_channels, 64),
             nn.BatchNorm1d(64),
@@ -33,75 +33,87 @@ class PFASModule(nn.Module):
         start_time = time.time()
         logger.debug(
             f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch shape: {batch.shape}")
-        N = coord.shape[0]  # 总点数
+        N = coord.shape[0]
         B = batch.max().item() + 1 if batch.numel() > 0 else 0
         if B == 0:
             logger.debug("PFAS: Empty batch, returning default grid")
             return torch.ones_like(coord) * self.grid_size_options[1][0]
 
-        # 修正1：构造 [N, N] 的同一样本掩码矩阵
-        batch_mask = (batch.unsqueeze(0) == batch.unsqueeze(1)).float()  # [N, N]
+        # -------------------------- 核心优化：分批次KNN（无[N,N]矩阵） --------------------------
+        # 1. 按batch分组处理，避免跨样本计算
+        dynamic_grid_sizes = torch.zeros_like(coord, device=coord.device)
+        for b in range(B):
+            # 提取当前batch的点（局部化，避免全量操作）
+            batch_mask = (batch == b)
+            coord_b = coord[batch_mask]  # [N_b, 3]，N_b是当前batch的点数
+            feat_b = feat[batch_mask]    # [N_b, C]
+            N_b = coord_b.shape[0]
+            if N_b < self.K:  # 点数不足K时，直接用背景网格
+                dynamic_grid_sizes[batch_mask] = torch.tensor(self.grid_size_options[1], device=coord.device)
+                continue
 
-        # 计算距离矩阵（N x N），并过滤跨样本点对
-        dist = torch.cdist(coord, coord)  # [N, N]
-        # 修正2：只保留同一样本内的点对距离，跨样本点对距离设为无穷大
-        dist = dist * batch_mask  # 非本样本点对距离置0
-        dist = dist + (1 - batch_mask) * torch.inf  # 非本样本点对距离设为inf（屏蔽）
-        dist[torch.eye(N, device=dist.device).bool()] = torch.inf  # 屏蔽自身距离（对角线）
+            # 2. 分批次KNN（避免一次性计算全量距离）
+            # 批次大小根据GPU内存调整（如1024，可根据实际情况修改）
+            batch_size_knn = 1024
+            idx_b = torch.zeros((N_b, self.K), dtype=torch.long, device=coord.device)
+            for i in range(0, N_b, batch_size_knn):
+                # 当前批次的坐标：[batch_size_knn, 3]
+                coord_batch = coord_b[i:i+batch_size_knn]
+                # 计算当前批次与所有batch内点的距离：[batch_size_knn, N_b]（而非[N,N]）
+                dist_batch = torch.cdist(coord_batch, coord_b)
+                # 屏蔽自身（对角线）
+                dist_batch[:, i:i+batch_size_knn] = torch.inf  # 只屏蔽当前批次的自身
+                # 取Top-K近邻索引
+                _, idx_batch = torch.topk(dist_batch, self.K, largest=False)
+                idx_b[i:i+batch_size_knn] = idx_batch
 
-        # 后续KNN等操作保持不变
-        _, idx = torch.topk(dist, self.K, largest=False)  # [N, K]
+            # -------------------------- 后续逻辑保持原功能（局部化处理） --------------------------
+            # 3. 近邻特征计算（基于局部索引）
+            neighbor_coords = coord_b[idx_b]  # [N_b, K, 3]
+            neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)  # 中心化
 
-        # 3. 批量提取近邻坐标（N x K x 3）
-        neighbor_coords = coord[idx]  # 利用索引批量获取，替代逐点循环
-        # 中心化（N x K x 3）
-        neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)
+            # 4. 批量协方差与PCA（保持向量化，无循环）
+            cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)  # [N_b, 3, 3]
+            U, S, V = torch.svd(cov.float())  # 用float降低精度，省内存
+            S = S.to(feat.dtype)
+            S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)  # [N_b, 3]
 
-        # 优化2：批量计算协方差和PCA（向量化操作，无Python循环）
-        # 协方差矩阵：N x 3 x 3（替代逐点计算）
-        cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)
-        # SVD分解（批量处理，N x 3 x 3）
-        U, S, V = torch.svd(cov.float())  # 用float降低计算精度，加速且省内存
-        S = S.to(feat.dtype)
-        # 归一化特征值（N x 3）
-        S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)
+            # 线性度计算
+            linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)  # [N_b, 1]
 
-        # 计算线性度（N x 1）
-        linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)
+            # 5. 密度计算（基于局部距离）
+            # 提取当前batch内的近邻距离（避免全量dist矩阵）
+            neighbor_dists = torch.gather(
+                torch.cdist(coord_b, coord_b),  # 仅当前batch的距离矩阵：[N_b, N_b]（比全量小B倍）
+                dim=1,
+                index=idx_b
+            )  # [N_b, K]
+            mean_dist = neighbor_dists.mean(dim=1, keepdim=True)
+            density = 1.0 / (mean_dist + 1e-6)  # [N_b, 1]
 
-        # 4. 批量计算密度（N x 1）
-        neighbor_dists = dist.gather(1, idx)  # N x K
-        mean_dist = neighbor_dists.mean(dim=1, keepdim=True)
-        density = 1.0 / (mean_dist + 1e-6)
+            # 6. 特征判断与网格生成（局部化）
+            feat_logits = self.feature_judge(feat_b)  # [N_b, 3]
+            feat_probs = F.softmax(feat_logits, dim=1)  # [N_b, 3]
 
-        logger.debug(f"PFAS: PCA and density calculation took {time.time() - start_time:.4f}s")
+            tower_prob = (density * 2.0 + feat_probs[:, 0:1]) / 3.0
+            background_prob = (torch.maximum(1.0 - linearity, 1.0 - density) + feat_probs[:, 1:2]) / 3.0
+            line_prob = (linearity * 2.0 + feat_probs[:, 2:3]) / 3.0
 
-        # 特征判断（与原逻辑一致，并行操作）
-        judge_start = time.time()
-        feat_logits = self.feature_judge(feat)
-        feat_probs = F.softmax(feat_logits, dim=1)  # N x 3
-
-        # 计算类别概率（批量操作）
-        tower_prob = (density * 2.0 + feat_probs[:, 0:1]) / 3.0
-        background_prob = (torch.maximum(1.0 - linearity, 1.0 - density) + feat_probs[:, 1:2]) / 3.0
-        line_prob = (linearity * 2.0 + feat_probs[:, 2:3]) / 3.0
-
-        # 生成动态网格（批量计算，N x 3）
-        grid_start = time.time()
-        grid_sizes = torch.zeros_like(coord, device=coord.device)
-        for i in range(3):  # 遍历x/y/z轴
-            tower_grid = self.grid_size_options[0][i]
-            background_grid = self.grid_size_options[1][i]
-            line_grid = self.grid_size_options[2][i] if i < 2 else self.grid_size_options[2][i] * 5
-            grid_sizes[:, i] = (
-                tower_prob[:, 0] * tower_grid +
-                background_prob[:, 0] * background_grid +
-                line_prob[:, 0] * line_grid + 1e-6
-            )
+            # 生成当前batch的动态网格
+            for i_axis in range(3):  # x/y/z轴
+                tower_grid = self.grid_size_options[0][i_axis]
+                background_grid = self.grid_size_options[1][i_axis]
+                line_grid = self.grid_size_options[2][i_axis] if i_axis < 2 else self.grid_size_options[2][i_axis] * 5
+                dynamic_grid_sizes[batch_mask, i_axis] = (
+                    tower_prob[:, 0] * tower_grid +
+                    background_prob[:, 0] * background_grid +
+                    line_prob[:, 0] * line_grid + 1e-6
+                )
 
         logger.debug(
-            f"PFAS forward complete - total time: {time.time() - start_time:.4f}s - output shape: {grid_sizes.shape}")
-        return grid_sizes
+            f"PFAS forward complete - total time: {time.time() - start_time:.4f}s - output shape: {dynamic_grid_sizes.shape}")
+        return dynamic_grid_sizes
+
 
 
 # 策略2: 跨模态电力特征增强（CMPFE）- 保持原逻辑，并行高效
