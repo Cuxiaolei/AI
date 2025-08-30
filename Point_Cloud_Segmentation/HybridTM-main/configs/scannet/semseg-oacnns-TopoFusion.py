@@ -45,7 +45,6 @@ model = dict(
         dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
         dict(
             type="PLPLELoss",
-            ce_weight=[1.0, 1.0, 2.0],  # 类别权重（电力线权重更高）
             ignore_index=-1,
             pseudo_threshold=0.6,  # 伪标签置信度阈值
             curvature_threshold=0.1,  # 曲率阈值
