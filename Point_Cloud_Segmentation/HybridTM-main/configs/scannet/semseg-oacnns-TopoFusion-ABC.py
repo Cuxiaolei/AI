@@ -28,7 +28,7 @@ model = dict(
         pl_topoconv_kwargs=dict(
             k=8,  # KNN邻居数量
             angle_weight=1.0,  # 法向一致性权重
-            curvature_weight=1.0  # 曲率权重
+            curvature_weight=0.5  # 曲率权重
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
