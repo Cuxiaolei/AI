@@ -26,7 +26,7 @@ model = dict(
         # 创新点1: 拓扑感知图卷积（PL-TopoConv）配置
         use_pl_topoconv=True,
         pl_topoconv_kwargs=dict(
-            k=16,  # KNN邻居数量
+            k=8,  # KNN邻居数量
             angle_weight=1.0,  # 法向一致性权重
             curvature_weight=1.0  # 曲率权重
         ),
