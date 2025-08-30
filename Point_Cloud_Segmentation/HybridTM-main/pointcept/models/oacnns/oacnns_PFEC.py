@@ -35,10 +35,10 @@ class PFASModule(nn.Module):
 
     def forward(self, feat, coord, batch):
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch num: {batch.max().item() + 1 if batch.numel() > 0 else 0}"
-            )
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(
+        #         f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch num: {batch.max().item() + 1 if batch.numel() > 0 else 0}"
+        #     )
 
         N = coord.shape[0]
         B = batch.max().item() + 1 if batch.numel() > 0 else 0
@@ -120,10 +120,10 @@ class PFASModule(nn.Module):
                         line_prob[:, 0] * line_grid + 1e-6
                 )
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"PFAS forward complete - time: {time.time() - start_time:.4f}s - output shape: {dynamic_grid_sizes.shape}"
-            )
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(
+        #         f"PFAS forward complete - time: {time.time() - start_time:.4f}s - output shape: {dynamic_grid_sizes.shape}"
+        #     )
         return dynamic_grid_sizes
 
 
@@ -174,8 +174,8 @@ class CMPFEModule(nn.Module):
 
     def forward(self, x):
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"CMPFE forward start - input shape: {x.shape}")
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(f"CMPFE forward start - input shape: {x.shape}")
 
         # 特征投影
         projected_feat = self.feature_projection(x)  # [N, proj_dim]
@@ -199,10 +199,10 @@ class CMPFEModule(nn.Module):
         sem_att = self.semantic_attention(fused_feat)
         final_feat = fused_feat * sem_att + x * (1 - sem_att)
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"CMPFE forward complete - time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}"
-            )
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(
+        #         f"CMPFE forward complete - time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}"
+        #     )
         return final_feat
 
 
@@ -314,10 +314,10 @@ class BasicBlock(nn.Module):
     def forward(self, x, clusters=None):
         block_id = id(self) % 1000
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"BasicBlock {block_id} start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}"
-            )
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(
+        #         f"BasicBlock {block_id} start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}"
+        #     )
 
         # CMPFE特征增强
         if self.use_cmpfe and self.cmpfe is not None:
@@ -393,8 +393,8 @@ class BasicBlock(nn.Module):
         x = self.voxel_block(x)
         x = x.replace_feature(self.act(x.features + res))
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"BasicBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(f"BasicBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
         return x
 
 
@@ -457,15 +457,15 @@ class DownBlock(nn.Module):
 
         # 下采样
         x = self.down(x)
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} downsampled - shape: {x.features.shape}")
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(f"DownBlock {block_id} downsampled - shape: {x.features.shape}")
 
         # 处理每个BasicBlock
         for i, block in enumerate(self.blocks):
             x = block(x)
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(f"DownBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
         return x
 
 
