@@ -438,13 +438,13 @@ class OACNNs_TopoFusion(nn.Module):
             x = self.dec[i](x, skip)
 
         x = self.final(x)
+        seg_logits = x.features  # 预测结果张量（核心输出）
 
-        # 返回特征和曲率（用于损失计算）
-        result = {"features": x.features}
+        # 附加信息（曲率）放在字典中，通过input_dict传递给损失函数
         if curvatures:
-            result["curvatures"] = curvatures[-1]  # 使用最后一个曲率值
+            input_dict["curvatures"] = curvatures[-1]  # 将曲率存入输入字典
 
-        return result
+        return seg_logits  # 主输出为预测张量，符合损失函数要求
 
     @staticmethod
     def _init_weights(m):
