@@ -129,14 +129,14 @@ class PFASModule(nn.Module):
         return dynamic_grid_sizes
 
 
-# 策略2: 跨模态电力特征增强（CMPFE）- 精简版
+# 策略2: 跨模态电力特征增强（CMPFE）
 class CMPFEModule(nn.Module):
-    def __init__(self, proj_dim=6, attn_hidden_dim=16):
+    def __init__(self, in_channels, proj_dim=6, attn_hidden_dim=16):  # 新增in_channels
         super().__init__()
+        self.in_channels = in_channels
         self.proj_dim = proj_dim
-        self.attn_hidden_dim = attn_hidden_dim
         self.feature_projection = nn.Sequential(
-            nn.Linear(proj_dim, proj_dim),  # 使用配置的投影维度
+            nn.Linear(in_channels, proj_dim),  # 从输入维度映射到proj_dim
             nn.BatchNorm1d(proj_dim),
             nn.ReLU()
         )
@@ -154,10 +154,10 @@ class CMPFEModule(nn.Module):
             nn.Sigmoid()
         )
         self.feature_fusion = nn.Sequential(
-            nn.Linear(proj_dim, proj_dim),
-            nn.BatchNorm1d(proj_dim),
+            nn.Linear(proj_dim, in_channels),  # 从proj_dim映射回输入维度
+            nn.BatchNorm1d(in_channels),
             nn.ReLU(),
-            nn.Linear(proj_dim, proj_dim)
+            nn.Linear(in_channels, in_channels)
         )
         self.semantic_attention = nn.Sequential(
             nn.Linear(proj_dim, proj_dim // 2),
@@ -220,6 +220,7 @@ class BasicBlock(nn.Module):
         # 根据配置决定是否实例化CMPFE模块
         if self.use_cmpfe:
             self.cmpfe = CMPFEModule(
+                in_channels=embed_channels,
                 proj_dim=cmpfe_params.get('proj_dim', 6),
                 attn_hidden_dim=cmpfe_params.get('attn_hidden_dim', 16)
             )
