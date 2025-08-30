@@ -299,7 +299,7 @@ class BasicBlock(nn.Module):
         logger.debug(
             f"BasicBlock {block_id} forward start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}")
 
-        # 根据配置决定是否使用CMPFE
+        # CMPFE特征增强（保持不变）
         if self.use_cmpfe and self.cmpfe is not None:
             enhanced_feat = self.cmpfe(x.features)
             x = x.replace_feature(enhanced_feat)
@@ -307,45 +307,46 @@ class BasicBlock(nn.Module):
         feat = x.features
         coord = x.indices[:, 1:].float()
         batch = x.indices[:, 0]
-        dynamic_grid_sizes = None
-
-        # 根据配置决定是否使用PFAS
-        if self.use_pfas and self.pfas is not None:
-            dynamic_grid_sizes = self.pfas(feat, coord, batch)
-        else:
-            # 不使用PFAS时使用默认网格大小
-            if self.grid_size is not None and len(self.grid_size) > 0:
-                default_grid = torch.tensor(self.grid_size[1], device=coord.device)  # 使用背景网格作为默认
-                dynamic_grid_sizes = torch.ones_like(coord, device=coord.device) * default_grid
-            else:
-                dynamic_grid_sizes = torch.ones_like(coord, device=coord.device) * 3.0  # fallback默认值
-
-        if dynamic_grid_sizes is None or dynamic_grid_sizes.numel() == 0:
-            logger.debug(f"BasicBlock {block_id} empty input, returning early")
-            return x
-
-        # 精简网格生成逻辑
-        grid_mean = dynamic_grid_sizes.mean(dim=1)
         representative_grids = []
-        # 减少聚类数量，降低计算量
-        if dynamic_grid_sizes.shape[0] > 100:
-            # 仅保留2个代表性网格
-            representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[50:100]], dim=0))
-            representative_grids.append(
-                torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:50]], dim=0))
-        else:
-            representative_grids.append(grid_mean.mean() * 1.0)
-            representative_grids.append(grid_mean.mean() * 1.2)
 
-        # 聚类和融合逻辑
+        # 区分PFAS启用/关闭的网格生成逻辑
+        if self.use_pfas and self.pfas is not None:
+            # 模式1：PFAS启用，动态网格+代表性网格
+            dynamic_grid_sizes = self.pfas(feat, coord, batch)
+            if dynamic_grid_sizes is None or dynamic_grid_sizes.numel() == 0:
+                logger.debug(f"BasicBlock {block_id} empty input, returning early")
+                return x
+            grid_mean = dynamic_grid_sizes.mean(dim=1)
+            # 动态网格取2个代表性网格（保持原逻辑）
+            if dynamic_grid_sizes.shape[0] > 100:
+                representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[50:100]], dim=0))
+                representative_grids.append(
+                    torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean, descending=True)[:50]], dim=0))
+            else:
+                representative_grids.append(grid_mean.mean() * 1.0)
+                representative_grids.append(grid_mean.mean() * 1.2)
+        else:
+            # 模式2：PFAS关闭，复用原模型多尺度网格
+            if self.grid_size is not None and len(self.grid_size) > 0:
+                # 直接使用原point_grid_size中的所有网格（与OACNNs一致）
+                representative_grids = [torch.tensor(gs, device=coord.device) for gs in self.grid_size]
+            else:
+                #  fallback：原模型默认多尺度网格
+                representative_grids = [
+                    torch.tensor([8, 12, 16, 16], device=coord.device),
+                    torch.tensor([6, 9, 12, 12], device=coord.device)
+                ]
+
+        # 生成聚类（统一逻辑，数量由representative_grids决定）
         clusters = []
-        for i, grid_size in enumerate(representative_grids):
+        for grid_size in representative_grids:
             cluster = voxel_grid(pos=coord, size=torch.clamp(grid_size, min=1e-6).tolist(), batch=batch)
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
 
+        # 特征融合（保持原逻辑，但聚类数量适配原模型）
         feats = []
-        valid_depth = min(len(self.l_w), len(clusters))
+        valid_depth = min(len(self.l_w), len(clusters))  # 此时len(clusters)在关闭PFAS时与原模型一致
         for i in range(valid_depth):
             cluster = clusters[i]
             pw = self.l_w[i](feat)
@@ -361,12 +362,10 @@ class BasicBlock(nn.Module):
             logger.debug(f"BasicBlock {block_id} no features for fusion, returning early")
             return x
 
-        # 确保adaptive输出维度与feats数量一致
+        # 自适应权重与特征融合（保持原逻辑）
         adp = self.adaptive(feat)
-        adp = adp[:, :len(feats)]
+        adp = adp[:, :len(feats)]  # 适配实际聚类数量
         adp = torch.softmax(adp, dim=1)
-
-        # 修复einsum维度不匹配问题
         feats = torch.stack(feats, dim=1)
         feats = torch.einsum("nc, ncd -> nd", adp, feats)
 
