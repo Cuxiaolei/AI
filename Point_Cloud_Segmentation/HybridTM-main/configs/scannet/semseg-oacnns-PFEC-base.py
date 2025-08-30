@@ -24,6 +24,8 @@ model = dict(
         # 格式：[[stage1电力塔, stage1背景, stage1电力线], [stage2...], [stage3...], [stage4...]]
         # 数值逻辑：电力塔（中等尺度3×3×3）、背景（大尺度10×10×10）、电力线（小尺度1×1×5，z轴拉长保连续性）
         # 策略1: PFAS模块控制
+        # 新增：原模型的point_grid_size（复用自OACNNs的默认值）
+        orig_point_grid_size=[[16, 32, 64], [8, 16, 24], [4, 8, 12], [2, 4, 6]],
         use_pfas=True,  # 是否启用PFAS
         pfas=dict(
             K=16,  # 近邻数

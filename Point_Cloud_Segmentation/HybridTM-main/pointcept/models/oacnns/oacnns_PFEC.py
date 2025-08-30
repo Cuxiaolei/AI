@@ -511,6 +511,8 @@ class OACNNs_PFEC(nn.Module):
             enc_depth=[2, 2, 4, 3],  # 减少深度
             down_ratio=[2, 2, 2, 2],
             dec_channels=[96, 96, 128, 256],
+            # 新增：原模型的point_grid_size（复用自OACNNs的默认值）
+            orig_point_grid_size=[[16, 32, 64], [8, 16, 24], [4, 8, 12], [2, 4, 6]],
             point_grid_size=[[[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
@@ -559,6 +561,13 @@ class OACNNs_PFEC(nn.Module):
         self.dec = nn.ModuleList()
         for i in range(self.num_stages):
             # 传递PFAS和CMPFE的配置参数到DownBlock
+            if self.use_pfas:
+                # 策略A启用时，使用PFAS的grid_size_options
+                current_grid = self.pfas_params["grid_size_options"][i]
+            else:
+                # 策略A关闭时，复用原模型的point_grid_size
+                current_grid = self.orig_point_grid_size[i]
+
             self.enc.append(
                 DownBlock(
                     in_channels=embed_channels if i == 0 else enc_channels[i - 1],
@@ -566,7 +575,7 @@ class OACNNs_PFEC(nn.Module):
                     depth=enc_depth[i],
                     norm_fn=norm_fn,
                     groups=groups[i],
-                    point_grid_size=point_grid_size[i] if self.use_pfas else None,
+                    point_grid_size=current_grid,
                     num_ref=enc_num_ref[i],
                     sp_indice_key=f"spconv{i}",
                     sub_indice_key=f"subm{i + 1}",
