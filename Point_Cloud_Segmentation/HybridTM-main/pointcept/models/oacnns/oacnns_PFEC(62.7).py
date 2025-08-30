@@ -11,23 +11,21 @@ from torch_geometric.utils import scatter
 import logging
 import time
 
-# 配置调试日志（减少冗余输出）
+# 配置调试日志
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
-# 策略1: 电力设施自适应尺度模块（PFAS）- 深度内存优化版
+# 策略1: 电力设施自适应尺度模块（PFAS）- 内存优化版
 class PFASModule(nn.Module):
     def __init__(self, in_channels, grid_size_options, K=16, max_points_per_batch=20000, knn_batch_size=512):
         super().__init__()
         self.grid_size_options = grid_size_options  # [电力塔, 背景, 电力线]
-        self.K = K
-        self.max_points_per_batch = max_points_per_batch
-        self.knn_batch_size = knn_batch_size
-
-        # 缩减特征判断器维度（64→32）
+        self.K = K  # 近邻数
+        self.max_points_per_batch = max_points_per_batch  # 从配置文件读取
+        self.knn_batch_size = knn_batch_size  # 从配置文件读取
         self.feature_judge = nn.Sequential(
-            nn.Linear(in_channels, 32),
+            nn.Linear(in_channels, 32),  # 缩减特征维度，降低内存占用
             nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Linear(32, 3)  # 输出三类概率
@@ -35,18 +33,17 @@ class PFASModule(nn.Module):
 
     def forward(self, feat, coord, batch):
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch num: {batch.max().item() + 1 if batch.numel() > 0 else 0}"
-            )
-
+        logger.debug(
+            f"PFAS forward start - feat shape: {feat.shape}, coord shape: {coord.shape}, batch shape: {batch.shape}")
         N = coord.shape[0]
         B = batch.max().item() + 1 if batch.numel() > 0 else 0
         if B == 0:
-            logger.warning("PFAS: Empty batch, returning default background grid")
+            logger.debug("PFAS: Empty batch, returning default grid")
             return torch.ones_like(coord) * self.grid_size_options[1][0]
 
         dynamic_grid_sizes = torch.zeros_like(coord, device=coord.device)
+
+        # 使用实例化时传入的参数，而非硬编码值
         max_points_per_batch = self.max_points_per_batch
         knn_batch_size = self.knn_batch_size
 
@@ -60,56 +57,63 @@ class PFASModule(nn.Module):
                 dynamic_grid_sizes[batch_mask] = torch.tensor(self.grid_size_options[1], device=coord.device)
                 continue
 
-            # 拆分超大数据集（避免[N_b, N_b]全量矩阵）
-            sub_batch_indices = torch.split(torch.arange(N_b, device=coord.device), max_points_per_batch)
+            # 核心优化：拆分超大数据集，避免[N_b, N_b]矩阵
+            sub_batches = torch.split(torch.arange(N_b, device=coord.device), max_points_per_batch)
             all_idx = torch.zeros((N_b, self.K), dtype=torch.long, device=coord.device)
             all_dist = torch.zeros((N_b, self.K), dtype=coord.dtype, device=coord.device)
 
-            for sub_idx in sub_batch_indices:
+            for sub_idx in sub_batches:
                 sub_size = len(sub_idx)
-                coord_sub = coord_b[sub_idx]
+                coord_sub = coord_b[sub_idx]  # [sub_size, 3]
+
+                # 分批次计算当前子batch与整个batch的距离
                 sub_idx_batch = torch.zeros((sub_size, self.K), dtype=torch.long, device=coord.device)
                 sub_dist_batch = torch.zeros((sub_size, self.K), dtype=coord.dtype, device=coord.device)
 
-                # 分批次计算KNN（降低内存峰值）
                 for i in range(0, sub_size, knn_batch_size):
-                    current_end = min(i + knn_batch_size, sub_size)
-                    current_coord = coord_sub[i:current_end]
-                    current_original_idx = sub_idx[i:current_end]
+                    # 计算当前小批次与所有点的距离（[knn_batch_size, N_b]）
+                    current_batch = coord_sub[i:i + knn_batch_size]
+                    dist = torch.cdist(current_batch, coord_b)
 
-                    dist = torch.cdist(current_coord, coord_b)
-                    dist[torch.arange(len(current_original_idx)), current_original_idx] = torch.inf
+                    # 屏蔽自身
+                    original_indices = sub_idx[i:i + knn_batch_size]
+                    dist[torch.arange(len(original_indices)), original_indices] = torch.inf
+
+                    # 获取近邻索引和距离
                     min_dist, min_idx = torch.topk(dist, self.K, largest=False)
+                    sub_dist_batch[i:i + knn_batch_size] = min_dist
+                    sub_idx_batch[i:i + knn_batch_size] = min_idx
 
-                    sub_dist_batch[i:current_end] = min_dist
-                    sub_idx_batch[i:current_end] = min_idx
-
+                # 保存当前子batch的结果
                 all_idx[sub_idx] = sub_idx_batch
                 all_dist[sub_idx] = sub_dist_batch
 
-            # 近邻特征计算（复用索引，减少内存碎片）
-            neighbor_coords = torch.index_select(coord_b, dim=0, index=all_idx.view(-1)).view(N_b, self.K, 3)
+            # 近邻特征计算（基于已有索引）
+            neighbor_coords = coord_b[all_idx]  # [N_b, K, 3]
             neighbor_centered = neighbor_coords - neighbor_coords.mean(dim=1, keepdim=True)
 
-            # PCA计算精度优化（float类型）
-            with torch.cuda.amp.autocast(enabled=False):
-                cov = torch.einsum('nkd,nke->nde', neighbor_centered.float(), neighbor_centered.float()) / (self.K - 1)
-                U, S, V = torch.svd(cov)
+            # 协方差与PCA（使用float降低精度）
+            cov = torch.einsum('nkd,nke->nde', neighbor_centered, neighbor_centered) / (self.K - 1)
+            U, S, V = torch.svd(cov.float())  # 节省内存
             S = S.to(feat.dtype)
             S_norm = S / (S.sum(dim=1, keepdim=True) + 1e-6)
 
-            # 特征计算（复用已有距离数据）
+            # 线性度计算
             linearity = S_norm[:, 0].unsqueeze(1) - (S_norm[:, 1] + S_norm[:, 2]).unsqueeze(1)
+
+            # 密度计算（复用之前记录的距离）
             mean_dist = all_dist.mean(dim=1, keepdim=True)
             density = 1.0 / (mean_dist + 1e-6)
 
-            # 动态网格生成
+            # 特征判断与网格生成
             feat_logits = self.feature_judge(feat_b)
             feat_probs = F.softmax(feat_logits, dim=1)
+
             tower_prob = (density * 2.0 + feat_probs[:, 0:1]) / 3.0
             background_prob = (torch.maximum(1.0 - linearity, 1.0 - density) + feat_probs[:, 1:2]) / 3.0
             line_prob = (linearity * 2.0 + feat_probs[:, 2:3]) / 3.0
 
+            # 生成动态网格
             for i_axis in range(3):
                 tower_grid = self.grid_size_options[0][i_axis]
                 background_grid = self.grid_size_options[1][i_axis]
@@ -120,29 +124,24 @@ class PFASModule(nn.Module):
                         line_prob[:, 0] * line_grid + 1e-6
                 )
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"PFAS forward complete - time: {time.time() - start_time:.4f}s - output shape: {dynamic_grid_sizes.shape}"
-            )
+        logger.debug(
+            f"PFAS forward complete - total time: {time.time() - start_time:.4f}s - output shape: {dynamic_grid_sizes.shape}")
         return dynamic_grid_sizes
 
 
-# 策略2: 跨模态电力特征增强（CMPFE）- 内存精简版
+# 策略2: 跨模态电力特征增强（CMPFE）
 class CMPFEModule(nn.Module):
-    def __init__(self, in_channels, proj_dim=6, attn_hidden_dim=16):
+    def __init__(self, in_channels, proj_dim=6, attn_hidden_dim=16):  # 新增in_channels
         super().__init__()
         self.in_channels = in_channels
         self.proj_dim = proj_dim
-        self.attn_hidden_dim = attn_hidden_dim
 
-        # 精简特征投影
         self.feature_projection = nn.Sequential(
-            nn.Linear(in_channels, proj_dim),
+            nn.Linear(in_channels, proj_dim),  # 从输入维度映射到proj_dim
             nn.BatchNorm1d(proj_dim),
-            nn.ReLU(),
+            nn.ReLU()
         )
-
-        # 缩减注意力层中间维度
+        # 注意力层使用配置的隐藏维度
         self.color_attention = nn.Sequential(
             nn.Linear(2, attn_hidden_dim),
             nn.ReLU(),
@@ -155,16 +154,13 @@ class CMPFEModule(nn.Module):
             nn.Linear(attn_hidden_dim, 2),
             nn.Sigmoid()
         )
-
-        # 精简特征融合
         self.feature_fusion = nn.Sequential(
-            nn.Linear(proj_dim, in_channels),
+            nn.Linear(proj_dim, in_channels),  # 从proj_dim映射回输入维度
             nn.BatchNorm1d(in_channels),
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
         )
-
-        # 语义注意力层维度匹配
+        # 关键修复：semantic_attention输入维度改为in_channels（与fused_feat维度匹配）
         self.semantic_attention = nn.Sequential(
             nn.Linear(in_channels, in_channels // 2),
             nn.ReLU(),
@@ -174,35 +170,25 @@ class CMPFEModule(nn.Module):
 
     def forward(self, x):
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"CMPFE forward start - input shape: {x.shape}")
+        logger.debug(f"CMPFE forward start - input shape: {x.shape}")
 
-        # 特征投影
-        projected_feat = self.feature_projection(x)  # [N, proj_dim]
-
-        # 特征拆分（带边界检查）
-        coord_feat = projected_feat[:, :2]
-        color_feat = projected_feat[:, 2:4]
+        projected_feat = self.feature_projection(x)
+        coord_feat = projected_feat[:, :2]  # 缩减为2维
+        color_feat = projected_feat[:, 2:4]  # 缩减为2维
+        # （可选）增加边界检查，避免切片越界
         normal_feat = projected_feat[:, 4:min(self.proj_dim, projected_feat.shape[1])]
-        if normal_feat.shape[1] < 2:
-            normal_feat = F.pad(normal_feat, (0, 2 - normal_feat.shape[1]), mode='constant', value=0)
 
-        # 跨模态注意力增强
         enhanced_color = color_feat * self.color_attention(color_feat)
         enhanced_normal = normal_feat * self.normal_attention(normal_feat)
 
-        # 特征拼接与融合
         enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
-        fused_feat = self.feature_fusion(enhanced_feat)  # [N, in_channels]
+        fused_feat = self.feature_fusion(enhanced_feat)  # 此时fused_feat维度为in_channels（如64）
 
-        # 语义注意力加权（合并残差计算）
-        sem_att = self.semantic_attention(fused_feat)
-        final_feat = fused_feat * sem_att + x * (1 - sem_att)
+        sem_att = self.semantic_attention(fused_feat)  # 输入维度匹配（64→64//2→1）
+        final_feat = fused_feat * sem_att + x * (1 - sem_att)  # 残差连接维度一致
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"CMPFE forward complete - time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}"
-            )
+        logger.debug(
+            f"CMPFE forward complete - total time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}")
         return final_feat
 
 
@@ -213,14 +199,14 @@ class BasicBlock(nn.Module):
             embed_channels,
             norm_fn=None,
             indice_key=None,
-            depth=3,  # 减少深度降低内存
+            depth=3,  # 减少深度，降低内存
             groups=None,
             grid_size=None,
             bias=False,
             use_pfas=True,
             use_cmpfe=True,
             cmpfe_params=None,
-            pfas_params=None,
+            pfas_params=None,  # 新增PFAS参数
     ):
         super().__init__()
         assert embed_channels % groups == 0
@@ -232,9 +218,9 @@ class BasicBlock(nn.Module):
         self.l_w = nn.ModuleList()
         self.use_cmpfe = use_cmpfe
         self.use_pfas = use_pfas
-        self.pfas_params = pfas_params or {}
+        self.pfas_params = pfas_params or {}  # 存储PFAS参数
 
-        # 实例化优化后的CMPFE模块
+        # 根据配置决定是否实例化CMPFE模块
         if self.use_cmpfe:
             self.cmpfe = CMPFEModule(
                 in_channels=embed_channels,
@@ -299,7 +285,7 @@ class BasicBlock(nn.Module):
         )
         self.act = nn.ReLU()
 
-        # 实例化优化后的PFAS模块
+        # 根据配置决定是否实例化PFAS模块，使用传入的参数
         if self.use_pfas and grid_size is not None:
             self.pfas = PFASModule(
                 in_channels=embed_channels,
@@ -314,12 +300,10 @@ class BasicBlock(nn.Module):
     def forward(self, x, clusters=None):
         block_id = id(self) % 1000
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"BasicBlock {block_id} start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}"
-            )
+        logger.debug(
+            f"BasicBlock {block_id} forward start - features shape: {x.features.shape}, spatial shape: {x.spatial_shape}")
 
-        # CMPFE特征增强
+        # CMPFE特征增强（保持不变）
         if self.use_cmpfe and self.cmpfe is not None:
             enhanced_feat = self.cmpfe(x.features)
             x = x.replace_feature(enhanced_feat)
@@ -329,13 +313,15 @@ class BasicBlock(nn.Module):
         batch = x.indices[:, 0]
         representative_grids = []
 
-        # PFAS动态网格生成
+        # 区分PFAS启用/关闭的网格生成逻辑
         if self.use_pfas and self.pfas is not None:
+            # 模式1：PFAS启用，动态网格+代表性网格
             dynamic_grid_sizes = self.pfas(feat, coord, batch)
             if dynamic_grid_sizes is None or dynamic_grid_sizes.numel() == 0:
-                logger.warning(f"BasicBlock {block_id} empty input, returning early")
+                logger.debug(f"BasicBlock {block_id} empty input, returning early")
                 return x
             grid_mean = dynamic_grid_sizes.mean(dim=1)
+            # 动态网格取2个代表性网格（保持原逻辑）
             if dynamic_grid_sizes.shape[0] > 100:
                 representative_grids.append(torch.mean(dynamic_grid_sizes[torch.argsort(grid_mean)[50:100]], dim=0))
                 representative_grids.append(
@@ -344,24 +330,27 @@ class BasicBlock(nn.Module):
                 representative_grids.append(grid_mean.mean() * 1.0)
                 representative_grids.append(grid_mean.mean() * 1.2)
         else:
+            # 模式2：PFAS关闭，复用原模型多尺度网格
             if self.grid_size is not None and len(self.grid_size) > 0:
+                # 直接使用原point_grid_size中的所有网格（与OACNNs一致）
                 representative_grids = [torch.tensor(gs, device=coord.device) for gs in self.grid_size]
             else:
+                #  fallback：原模型默认多尺度网格
                 representative_grids = [
                     torch.tensor([8, 12, 16, 16], device=coord.device),
                     torch.tensor([6, 9, 12, 12], device=coord.device)
                 ]
 
-        # 生成聚类
+        # 生成聚类（统一逻辑，数量由representative_grids决定）
         clusters = []
         for grid_size in representative_grids:
             cluster = voxel_grid(pos=coord, size=torch.clamp(grid_size, min=1e-6).tolist(), batch=batch)
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
 
-        # 特征融合
+        # 特征融合（保持原逻辑，但聚类数量适配原模型）
         feats = []
-        valid_depth = min(len(self.l_w), len(clusters))
+        valid_depth = min(len(self.l_w), len(clusters))  # 此时len(clusters)在关闭PFAS时与原模型一致
         for i in range(valid_depth):
             cluster = clusters[i]
             pw = self.l_w[i](feat)
@@ -374,12 +363,12 @@ class BasicBlock(nn.Module):
             feats.append(pfeat)
 
         if not feats:
-            logger.warning(f"BasicBlock {block_id} no features for fusion, returning early")
+            logger.debug(f"BasicBlock {block_id} no features for fusion, returning early")
             return x
 
-        # 自适应权重与特征融合
+        # 自适应权重与特征融合（保持原逻辑）
         adp = self.adaptive(feat)
-        adp = adp[:, :len(feats)]
+        adp = adp[:, :len(feats)]  # 适配实际聚类数量
         adp = torch.softmax(adp, dim=1)
         feats = torch.stack(feats, dim=1)
         feats = torch.einsum("nc, ncd -> nd", adp, feats)
@@ -393,8 +382,7 @@ class BasicBlock(nn.Module):
         x = self.voxel_block(x)
         x = x.replace_feature(self.act(x.features + res))
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"BasicBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
+        logger.debug(f"BasicBlock {block_id} forward complete - total time: {time.time() - start_time:.4f}s")
         return x
 
 
@@ -413,7 +401,7 @@ class DownBlock(nn.Module):
             use_pfas=True,
             use_cmpfe=True,
             cmpfe_params=None,
-            pfas_params=None,
+            pfas_params=None,  # 新增PFAS参数
     ):
         super().__init__()
         self.num_ref = num_ref
@@ -445,27 +433,28 @@ class DownBlock(nn.Module):
                     use_pfas=use_pfas,
                     use_cmpfe=use_cmpfe,
                     cmpfe_params=cmpfe_params,
-                    pfas_params=pfas_params,
+                    pfas_params=pfas_params,  # 传递PFAS参数
                 )
             )
 
     def forward(self, x):
         block_id = id(self) % 1000
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} start - features shape: {x.features.shape}")
+        logger.debug(f"DownBlock {block_id} forward start - features shape: {x.features.shape}")
 
         # 下采样
+        down_start = time.time()
         x = self.down(x)
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} downsampled - shape: {x.features.shape}")
+        logger.debug(
+            f"DownBlock {block_id} downsampling took {time.time() - down_start:.4f}s - new shape: {x.features.shape}")
 
         # 处理每个BasicBlock
         for i, block in enumerate(self.blocks):
+            block_start = time.time()
             x = block(x)
+            logger.debug(f"DownBlock {block_id} block {i} took {time.time() - block_start:.4f}s")
 
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} complete - time: {time.time() - start_time:.4f}s")
+        logger.debug(f"DownBlock {block_id} forward complete - total time: {time.time() - start_time:.4f}s")
         return x
 
 
@@ -525,6 +514,7 @@ class OACNNs_PFEC(nn.Module):
             enc_depth=[2, 2, 4, 3],  # 减少深度
             down_ratio=[2, 2, 2, 2],
             dec_channels=[96, 96, 128, 256],
+            # 新增：原模型的point_grid_size（复用自OACNNs的默认值）
             orig_point_grid_size=[[16, 32, 64], [8, 16, 24], [4, 8, 12], [2, 4, 6]],
             point_grid_size=[[[3, 3, 3], [10, 10, 10], [1, 1, 5]],
                              [[3, 3, 3], [10, 10, 10], [1, 1, 5]],
@@ -543,8 +533,8 @@ class OACNNs_PFEC(nn.Module):
         self.embed_channels = embed_channels
         self.use_pfas = use_pfas
         self.use_cmpfe = use_cmpfe
-        self.pfas_params = pfas or {}
-        self.cmpfe_params = cmpfe or {}
+        self.pfas_params = pfas or {}  # 存储PFAS配置参数
+        self.cmpfe_params = cmpfe or {}  # 存储CMPFE配置参数
         self.orig_point_grid_size = orig_point_grid_size
         self.point_grid_size = point_grid_size
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
@@ -575,7 +565,13 @@ class OACNNs_PFEC(nn.Module):
         self.enc = nn.ModuleList()
         self.dec = nn.ModuleList()
         for i in range(self.num_stages):
-            current_grid = self.pfas_params["grid_size_options"][i] if self.use_pfas else self.orig_point_grid_size[i]
+            # 传递PFAS和CMPFE的配置参数到DownBlock
+            if self.use_pfas:
+                # 策略A启用时，使用PFAS的grid_size_options
+                current_grid = self.pfas_params["grid_size_options"][i]
+            else:
+                # 策略A关闭时，复用原模型的point_grid_size
+                current_grid = self.orig_point_grid_size[i]
 
             self.enc.append(
                 DownBlock(
@@ -591,7 +587,7 @@ class OACNNs_PFEC(nn.Module):
                     use_pfas=self.use_pfas,
                     use_cmpfe=self.use_cmpfe,
                     cmpfe_params=self.cmpfe_params,
-                    pfas_params=self.pfas_params,
+                    pfas_params=self.pfas_params,  # 传递PFAS参数
                 )
             )
             self.dec.append(
