@@ -107,27 +107,24 @@ class ClsEvaluator(HookBase):
 class SemSegEvaluator(HookBase):
     def __init__(self):
         super().__init__()
-        # 仅初始化路径，不立即创建文件
+        # 仅初始化路径初始化
         self.csv_path = None
-        # 标记是否已初始化CSV
         self.csv_initialized = False
+        # 新增：子批次处理参数
+        self.max_points_per_subbatch = 200000  # 可根据GPU内存调整
 
     def _init_csv(self):
         """初始化CSV文件并写入表头"""
-        """初始化CSV文件并写入表头（延迟到第一次评估时执行）"""
         if self.csv_initialized:
             return
 
-        # 此时trainer已被正确赋值，可以安全访问
         self.csv_path = os.path.join(
             self.trainer.cfg.save_path,
             "semantic_segmentation_metrics.csv"
         )
 
-        # 创建存储目录
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
 
-        # 写入表头
         with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             header = ['epoch']
@@ -141,14 +138,13 @@ class SemSegEvaluator(HookBase):
         self.csv_initialized = True
 
     def after_epoch(self):
-        """在每个epoch结束后执行评估（此时trainer已就绪）"""
+        """在每个epoch结束后执行评估"""
         if hasattr(self.trainer.cfg, 'evaluate') and self.trainer.cfg.evaluate:
-            # 确保CSV在第一次评估前初始化
             self._init_csv()
             self.eval()
 
     def eval(self):
-        """执行评估并计算指标"""
+        """执行评估并计算指标（添加子批次处理）"""
         self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Segmentation Evaluation >>>>>>>>>>>>>>>>")
         self.trainer.model.eval()
 
@@ -160,83 +156,141 @@ class SemSegEvaluator(HookBase):
         num_classes = self.trainer.cfg.data.num_classes
 
         for i, input_dict in enumerate(self.trainer.val_loader):
-            # 数据移至GPU
-            for key in input_dict.keys():
-                if isinstance(input_dict[key], torch.Tensor):
-                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+            # 1. 提取核心数据并移至GPU
+            coords = input_dict["coord"].cuda(non_blocking=True)
+            feats = input_dict["feat"].cuda(non_blocking=True) if "feat" in input_dict else None
+            segment = input_dict["segment"].cuda(non_blocking=True)
+            offset = input_dict["offset"].cuda(non_blocking=True) if "offset" in input_dict else None
+            origin_coord = input_dict.get("origin_coord")
+            origin_segment = input_dict.get("origin_segment")
+            origin_offset = input_dict.get("origin_offset")
 
-            # 模型推理（无梯度）
-            with torch.no_grad():
-                # 新增：与训练阶段同步启用AMP，依赖配置中的enable_amp
-                with torch.cuda.amp.autocast(enabled=self.trainer.cfg.enable_amp):
-                    output_dict = self.trainer.model(input_dict)  # 前向传播
+            # 2. 计算总点数和子批次数量
+            N = coords.shape[0]
+            num_subbatches = (N + self.max_points_per_subbatch - 1) // self.max_points_per_subbatch
+            self.trainer.logger.info(f"Batch {i+1}: Split into {num_subbatches} subbatches (total {N} points)")
 
-            # 获取预测和标签
-            output = output_dict["seg_logits"]  # 分割模型输出
-            loss = output_dict["loss"]
-            pred = output.max(1)[1]  # 取概率最大的类别作为预测
-            label = input_dict["segment"]  # 真实标签
+            # 3. 子批次累计变量
+            sub_intersection = None
+            sub_union = None
+            sub_total_target = None
+            sub_loss = 0.0
 
-            # 处理坐标映射（如果需要）
-            if "origin_coord" in input_dict.keys():
-                idx, _ = pointops.knn_query(
-                    1,
-                    input_dict["coord"].float(),
-                    input_dict["offset"].int(),
-                    input_dict["origin_coord"].float(),
-                    input_dict["origin_offset"].int(),
+            for sb in range(num_subbatches):
+                # 计算子批次索引范围
+                start = sb * self.max_points_per_subbatch
+                end = min((sb + 1) * self.max_points_per_subbatch, N)
+                self.trainer.logger.info(f"Subbatch {sb+1}/{num_subbatches}: Processing points {start}-{end}")
+
+                # 构建子批次输入
+                sub_input = {
+                    "coord": coords[start:end],
+                    "segment": segment[start:end]
+                }
+                if feats is not None:
+                    sub_input["feat"] = feats[start:end]
+                if offset is not None:
+                    # 调整子批次offset（单场景简化处理）
+                    sub_input["offset"] = torch.tensor([end - start], device=offset.device)
+                # 传递原始坐标（如果存在）
+                if origin_coord is not None:
+                    sub_input["origin_coord"] = origin_coord
+                    sub_input["origin_offset"] = origin_offset
+
+                # 4. 子批次推理（带AMP）
+                with torch.no_grad(), torch.cuda.amp.autocast(enabled=self.trainer.cfg.enable_amp):
+                    sub_output = self.trainer.model(sub_input)
+
+                # 5. 提取子批次结果
+                sub_output_seg = sub_output["seg_logits"]
+                sub_pred = sub_output_seg.max(1)[1]
+                sub_loss_val = sub_output["loss"].item()
+
+                # 处理坐标映射
+                sub_label = sub_input["segment"]
+                if "origin_coord" in sub_input:
+                    idx, _ = pointops.knn_query(
+                        1,
+                        sub_input["coord"].float(),
+                        sub_input["offset"].int(),
+                        sub_input["origin_coord"].float(),
+                        sub_input["origin_offset"].int(),
+                    )
+                    sub_pred = sub_pred[idx.flatten().long()]
+                    sub_label = origin_segment
+
+                # 6. 计算子批次交并集
+                sb_inter, sb_union, sb_target = intersection_and_union_gpu(
+                    sub_pred,
+                    sub_label,
+                    num_classes,
+                    self.trainer.cfg.data.ignore_index,
                 )
-                pred = pred[idx.flatten().long()]
-                label = input_dict["origin_segment"]
 
-            # 计算当前batch的交并集
-            intersection, union, target = intersection_and_union_gpu(
-                pred,
-                label,
-                num_classes,
-                self.trainer.cfg.data.ignore_index,
-            )
+                # 7. 累计子批次结果
+                if sub_intersection is None:
+                    sub_intersection = sb_inter
+                    sub_union = sb_union
+                    sub_total_target = sb_target
+                else:
+                    sub_intersection += sb_inter
+                    sub_union += sb_union
+                    sub_total_target += sb_target
+                # 按点数加权计算损失
+                sub_loss += sub_loss_val * (end - start) / N
 
-            # 多卡训练时汇总结果
+                # 8. 清理子批次内存
+                del sub_input, sub_output, sub_output_seg, sub_pred, sub_label
+                del sb_inter, sb_union, sb_target
+                torch.cuda.empty_cache()
+
+            # 9. 多卡汇总当前批次结果
             if comm.get_world_size() > 1:
-                comm.all_reduce(intersection), comm.all_reduce(union), comm.all_reduce(target)
+                comm.all_reduce(sub_intersection)
+                comm.all_reduce(sub_union)
+                comm.all_reduce(sub_total_target)
 
-            # 转为numpy并累计
-            intersection = intersection.cpu().numpy()
-            union = union.cpu().numpy()
-            target = target.cpu().numpy()
+            # 10. 转换为numpy并累计到总结果
+            sub_inter_np = sub_intersection.cpu().numpy()
+            sub_union_np = sub_union.cpu().numpy()
+            sub_target_np = sub_total_target.cpu().numpy()
 
-            # 初始化累计变量（第一次迭代）
             if total_intersection is None:
-                total_intersection = np.zeros_like(intersection)
-                total_union = np.zeros_like(union)
-                total_target = np.zeros_like(target)
+                total_intersection = np.zeros_like(sub_inter_np)
+                total_union = np.zeros_like(sub_union_np)
+                total_target = np.zeros_like(sub_target_np)
 
-            total_intersection += intersection
-            total_union += union
-            total_target += target
-            total_loss += loss.item()
+            total_intersection += sub_inter_np
+            total_union += sub_union_np
+            total_target += sub_target_np
+            total_loss += sub_loss
 
-            # 打印当前batch信息
-            info = f"Test: [{i + 1}/{len(self.trainer.val_loader)}] Loss {loss.item():.4f}"
-            if "origin_coord" in input_dict.keys():
+            # 打印批次信息
+            info = f"Test: [{i + 1}/{len(self.trainer.val_loader)}] Avg Loss {sub_loss:.4f} (split into {num_subbatches} subbatches)"
+            if "origin_coord" in input_dict:
                 info = "Interp. " + info
             self.trainer.logger.info(info)
 
-        # 计算所有指标
-        loss_avg = total_loss / len(self.trainer.val_loader)
-        iou_class = total_intersection / (total_union + 1e-10)  # 每类IoU
-        acc_class = total_intersection / (total_target + 1e-10)  # 每类Accuracy
-        m_iou = np.mean(iou_class)  # 平均IoU
-        oa = sum(total_intersection) / (sum(total_target) + 1e-10)  # 总体准确率
+            # 清理当前批次内存
+            del coords, feats, segment, offset
+            del sub_intersection, sub_union, sub_total_target
+            del sub_inter_np, sub_union_np, sub_target_np
+            torch.cuda.empty_cache()
 
-        # 1. 打印整体指标
+        # 计算所有指标（保持不变）
+        loss_avg = total_loss / len(self.trainer.val_loader)
+        iou_class = total_intersection / (total_union + 1e-10)
+        acc_class = total_intersection / (total_target + 1e-10)
+        m_iou = np.mean(iou_class)
+        oa = sum(total_intersection) / (sum(total_target) + 1e-10)
+
+        # 打印整体指标
         self.trainer.logger.info("=" * 70)
         self.trainer.logger.info(f"Validation Results - Epoch: {self.trainer.epoch + 1}")
         self.trainer.logger.info(f"mIoU: {m_iou:.4f} | OA: {oa:.4f} | Avg Loss: {loss_avg:.4f}")
         self.trainer.logger.info("=" * 70)
 
-        # 2. 打印每个类别的详细指标
+        # 打印每个类别的详细指标
         self.trainer.logger.info("Per-class Metrics:")
         for i in range(num_classes):
             class_name = self.trainer.cfg.data.names[i] if hasattr(self.trainer.cfg.data, 'names') else f"Class {i}"
@@ -245,38 +299,34 @@ class SemSegEvaluator(HookBase):
             )
         self.trainer.logger.info("=" * 70)
 
-        # 3. 记录到TensorBoard
+        # 记录到TensorBoard
         current_epoch = self.trainer.epoch + 1
         if hasattr(self.trainer, 'writer') and self.trainer.writer is not None:
             self.trainer.writer.add_scalar("val/loss", loss_avg, current_epoch)
             self.trainer.writer.add_scalar("val/mIoU", m_iou, current_epoch)
             self.trainer.writer.add_scalar("val/OA", oa, current_epoch)
 
-            # 记录每个类的指标
             for i in range(num_classes):
                 self.trainer.writer.add_scalar(f"val/class_{i}_IoU", iou_class[i], current_epoch)
                 self.trainer.writer.add_scalar(f"val/class_{i}_Acc", acc_class[i], current_epoch)
 
-        # 4. 保存到CSV文件
+        # 保存到CSV文件
         self._save_to_csv(current_epoch, iou_class, acc_class, m_iou, oa)
 
         self.trainer.logger.info("<<<<<<<<<<<<<<<<< End Segmentation Evaluation <<<<<<<<<<<<<<<<<")
-        # 更新最佳模型判断指标
         self.trainer.comm_info["current_metric_value"] = m_iou
         self.trainer.comm_info["current_metric_name"] = "mIoU"
 
     def _save_to_csv(self, epoch, iou_class, acc_class, m_iou, oa):
         """将当前轮次的指标保存到CSV"""
-        # 确保表头正确（如果类别数量与初始不同）
         if not os.path.exists(self.csv_path):
             self._init_csv()
 
         with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            # 构建数据行：轮次 + 每类IoU + 每类Acc + mIoU + OA
             row = [epoch]
             for i in range(len(iou_class)):
-                row.append(round(iou_class[i], 4))  # 保留4位小数
+                row.append(round(iou_class[i], 4))
                 row.append(round(acc_class[i], 4))
             row.append(round(m_iou, 4))
             row.append(round(oa, 4))
