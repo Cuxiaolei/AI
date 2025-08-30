@@ -167,7 +167,9 @@ class SemSegEvaluator(HookBase):
 
             # 模型推理（无梯度）
             with torch.no_grad():
-                output_dict = self.trainer.model(input_dict)
+                # 新增：与训练阶段同步启用AMP，依赖配置中的enable_amp
+                with torch.cuda.amp.autocast(enabled=self.trainer.cfg.enable_amp):
+                    output_dict = self.trainer.model(input_dict)  # 前向传播
 
             # 获取预测和标签
             output = output_dict["seg_logits"]  # 分割模型输出
