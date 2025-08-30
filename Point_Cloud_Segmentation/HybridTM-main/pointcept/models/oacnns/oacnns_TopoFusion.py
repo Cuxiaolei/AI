@@ -12,7 +12,7 @@ from torch_geometric.nn.pool import voxel_grid
 from torch_geometric.utils import scatter
 
 # 导入原始模块
-from .oacnns_v1m1_base import BasicBlock as OriginalBasicBlock, DownBlock as OriginalDownBlock, \
+from .oacnns_v1m1_base import BasicBlock as OriginalBasicBlock, DonwBlock as OriginalDownBlock, \
     UpBlock as OriginalUpBlock
 
 
