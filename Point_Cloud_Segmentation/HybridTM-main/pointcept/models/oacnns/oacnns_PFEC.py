@@ -135,6 +135,7 @@ class CMPFEModule(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.proj_dim = proj_dim
+
         self.feature_projection = nn.Sequential(
             nn.Linear(in_channels, proj_dim),  # 从输入维度映射到proj_dim
             nn.BatchNorm1d(proj_dim),
@@ -159,10 +160,11 @@ class CMPFEModule(nn.Module):
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
         )
+        # 关键修复：semantic_attention输入维度改为in_channels（与fused_feat维度匹配）
         self.semantic_attention = nn.Sequential(
-            nn.Linear(proj_dim, proj_dim // 2),
+            nn.Linear(in_channels, in_channels // 2),
             nn.ReLU(),
-            nn.Linear(proj_dim // 2, 1),
+            nn.Linear(in_channels // 2, 1),
             nn.Sigmoid()
         )
 
@@ -173,16 +175,17 @@ class CMPFEModule(nn.Module):
         projected_feat = self.feature_projection(x)
         coord_feat = projected_feat[:, :2]  # 缩减为2维
         color_feat = projected_feat[:, 2:4]  # 缩减为2维
-        normal_feat = projected_feat[:, 4:self.proj_dim]  # 使用配置的投影维度
+        # （可选）增加边界检查，避免切片越界
+        normal_feat = projected_feat[:, 4:min(self.proj_dim, projected_feat.shape[1])]
 
         enhanced_color = color_feat * self.color_attention(color_feat)
         enhanced_normal = normal_feat * self.normal_attention(normal_feat)
 
         enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
-        fused_feat = self.feature_fusion(enhanced_feat)
+        fused_feat = self.feature_fusion(enhanced_feat)  # 此时fused_feat维度为in_channels（如64）
 
-        sem_att = self.semantic_attention(fused_feat)
-        final_feat = fused_feat * sem_att + x * (1 - sem_att)
+        sem_att = self.semantic_attention(fused_feat)  # 输入维度匹配（64→64//2→1）
+        final_feat = fused_feat * sem_att + x * (1 - sem_att)  # 残差连接维度一致
 
         logger.debug(
             f"CMPFE forward complete - total time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}")
