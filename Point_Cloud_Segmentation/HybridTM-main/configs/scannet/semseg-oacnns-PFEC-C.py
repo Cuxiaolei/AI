@@ -57,7 +57,6 @@ model = dict(
             ignore_index=-1,
             temperature=0.1,  # InfoNCE温度系数
             gamma=0.5,  # 连续性损失权重
-            pos_dist_thresh=1.0  # 正样本距离阈值
         )
     ],
     # 可选：添加类别权重，解决数据不平衡（若电力线样本少，可设更高权重）
