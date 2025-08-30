@@ -39,7 +39,7 @@ model = dict(
         # 策略2: CMPFE模块控制
         use_cmpfe=True,  # 是否启用CMPFE
         cmpfe=dict(
-            proj_dim=6,  # 特征投影维度
+            proj_dim=9,  # 特征投影维度
             attn_hidden_dim=16  # 注意力隐藏层维度
         ),
         dec_depth=[2, 2, 2, 2],  # Decoder各阶段UpBlock数量，保持原配置
@@ -145,6 +145,7 @@ data = dict(
             # 新增：验证阶段裁剪点云（与训练保持相似规模）
             # dict(type='SphereCrop', point_max=5000, mode='center'),  # 限制最大5万个点
             # dict(type="NormalizeNormal"),  # 新增：法向量归一化
+            dict(type="SphereCrop", point_max=20000, mode="center"),
             dict(type="ToTensor"),
             dict(
                 type="Collect",

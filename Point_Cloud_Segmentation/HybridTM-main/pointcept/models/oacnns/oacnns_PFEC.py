@@ -127,44 +127,51 @@ class PFASModule(nn.Module):
         return dynamic_grid_sizes
 
 
-# 策略2: 跨模态电力特征增强（CMPFE）- 内存精简版
+# 跨模态电力特征增强（CMPFE）- 适配3通道模态版
 class CMPFEModule(nn.Module):
-    def __init__(self, in_channels, proj_dim=6, attn_hidden_dim=16):
+    def __init__(self, in_channels, proj_dim=9, attn_hidden_dim=16):
         super().__init__()
         self.in_channels = in_channels
-        self.proj_dim = proj_dim
+        self.proj_dim = proj_dim  # 3(coord) + 3(color) + 3(normal) = 9
         self.attn_hidden_dim = attn_hidden_dim
 
-        # 精简特征投影
+        # 特征投影：将输入特征映射到9维（适配3通道模态）
         self.feature_projection = nn.Sequential(
             nn.Linear(in_channels, proj_dim),
             nn.BatchNorm1d(proj_dim),
             nn.ReLU(),
         )
 
-        # 缩减注意力层中间维度
+        # 注意力层调整为3通道输入（匹配颜色和法向量的维度）
         self.color_attention = nn.Sequential(
-            nn.Linear(2, attn_hidden_dim),
+            nn.Linear(3, attn_hidden_dim),  # 输入改为3通道（r,g,b）
             nn.ReLU(),
-            nn.Linear(attn_hidden_dim, 2),
+            nn.Linear(attn_hidden_dim, 3),  # 输出3通道注意力权重
             nn.Sigmoid()
         )
         self.normal_attention = nn.Sequential(
-            nn.Linear(2, attn_hidden_dim),
+            nn.Linear(3, attn_hidden_dim),  # 输入改为3通道（nx,ny,nz）
             nn.ReLU(),
-            nn.Linear(attn_hidden_dim, 2),
+            nn.Linear(attn_hidden_dim, 3),  # 输出3通道注意力权重
+            nn.Sigmoid()
+        )
+        # 新增坐标注意力（原版本未关注坐标，补充空间特征权重）
+        self.coord_attention = nn.Sequential(
+            nn.Linear(3, attn_hidden_dim),  # 输入3通道（x,y,z）
+            nn.ReLU(),
+            nn.Linear(attn_hidden_dim, 3),  # 输出3通道注意力权重
             nn.Sigmoid()
         )
 
-        # 精简特征融合
+        # 特征融合：输入维度改为9（3+3+3）
         self.feature_fusion = nn.Sequential(
-            nn.Linear(proj_dim, in_channels),
+            nn.Linear(proj_dim, in_channels),  # proj_dim=9
             nn.BatchNorm1d(in_channels),
             nn.ReLU(),
             nn.Linear(in_channels, in_channels)
         )
 
-        # 语义注意力层维度匹配
+        # 语义注意力层保持不变（基于融合后的特征）
         self.semantic_attention = nn.Sequential(
             nn.Linear(in_channels, in_channels // 2),
             nn.ReLU(),
@@ -173,37 +180,31 @@ class CMPFEModule(nn.Module):
         )
 
     def forward(self, x):
-        start_time = time.time()
-        # if logger.isEnabledFor(logging.INFO):
-        #     logger.info(f"CMPFE forward start - input shape: {x.shape}")
+        # 特征投影：将输入特征映射到9维（3+3+3）
+        projected_feat = self.feature_projection(x)  # [N, 9]
 
-        # 特征投影
-        projected_feat = self.feature_projection(x)  # [N, proj_dim]
+        # 特征拆分（严格匹配3通道模态）
+        coord_feat = projected_feat[:, :3]    # 坐标x,y,z（3维）
+        color_feat = projected_feat[:, 3:6]   # 颜色r,g,b（3维）
+        normal_feat = projected_feat[:, 6:9]  # 法向量nx,ny,nz（3维）
 
-        # 特征拆分（带边界检查）
-        coord_feat = projected_feat[:, :2]
-        color_feat = projected_feat[:, 2:4]
-        normal_feat = projected_feat[:, 4:min(self.proj_dim, projected_feat.shape[1])]
-        if normal_feat.shape[1] < 2:
-            normal_feat = F.pad(normal_feat, (0, 2 - normal_feat.shape[1]), mode='constant', value=0)
-
-        # 跨模态注意力增强
+        # 跨模态注意力增强（每个模态单独加权）
+        enhanced_coord = coord_feat * self.coord_attention(coord_feat)  # 补充坐标注意力
         enhanced_color = color_feat * self.color_attention(color_feat)
         enhanced_normal = normal_feat * self.normal_attention(normal_feat)
 
-        # 特征拼接与融合
-        enhanced_feat = torch.cat([coord_feat, enhanced_color, enhanced_normal], dim=1)
+        # 特征拼接（总维度保持9）
+        enhanced_feat = torch.cat([enhanced_coord, enhanced_color, enhanced_normal], dim=1)  # [N, 9]
+
+        # 特征融合：映射回输入通道数
         fused_feat = self.feature_fusion(enhanced_feat)  # [N, in_channels]
 
-        # 语义注意力加权（合并残差计算）
+        # 语义注意力加权（残差连接）
         sem_att = self.semantic_attention(fused_feat)
         final_feat = fused_feat * sem_att + x * (1 - sem_att)
 
-        # if logger.isEnabledFor(logging.INFO):
-        #     logger.info(
-        #         f"CMPFE forward complete - time: {time.time() - start_time:.4f}s - output shape: {final_feat.shape}"
-        #     )
         return final_feat
+
 
 
 class BasicBlock(nn.Module):
