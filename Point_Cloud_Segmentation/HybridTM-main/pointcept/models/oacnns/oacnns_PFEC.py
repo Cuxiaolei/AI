@@ -531,6 +531,8 @@ class OACNNs_PFEC(nn.Module):
         self.use_cmpfe = use_cmpfe
         self.pfas_params = pfas or {}  # 存储PFAS配置参数
         self.cmpfe_params = cmpfe or {}  # 存储CMPFE配置参数
+        self.orig_point_grid_size = orig_point_grid_size
+        self.point_grid_size = point_grid_size
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
         self.stem = spconv.SparseSequential(
