@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-batch_size = 3  # bs: total bs in all gpus
+batch_size = 100  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = True
 enable_amp = True  # 混合精度训练，加速训练且节省显存
@@ -55,8 +55,13 @@ model = dict(
         #     type="PLCCLoss",
         #     loss_weight=0.3,
         #     ignore_index=-1,
-        #     temperature=0.1,  # InfoNCE温度系数
-        #     gamma=0.5,  # 连续性损失权重
+        #     temperature=0.1,
+        #     gamma=0.5,
+        #     max_batch_size=2000,  # 进一步减小批次
+        #     pos_dist_thresh=1.0,
+        #     neg_sample_ratio=1.5,  # 降低负样本比例
+        #     max_neg_samples=1000,  # 限制负样本数量
+        #     memory_safe_mode=True  # 启用内存安全模式
         # )
     ],
     # 可选：添加类别权重，解决数据不平衡（若电力线样本少，可设更高权重）
