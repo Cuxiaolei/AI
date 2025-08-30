@@ -111,22 +111,23 @@ class SemSegEvaluator(HookBase):
         self.csv_path = None
         # 标记是否已初始化CSV
         self.csv_initialized = False
+        # -------------------------- 新增：子批次配置 --------------------------
+        # 单个子批次最大点数（可根据GPU内存调整，默认20万点）
+        self.max_points_per_subbatch = 200000
+        # 模型所需的核心字段（确保子批次传递时不遗漏，含grid_coord）
+        self.core_fields = ["coord", "segment", "grid_coord", "feat", "offset"]
 
     def _init_csv(self):
-        """初始化CSV文件并写入表头"""
         """初始化CSV文件并写入表头（延迟到第一次评估时执行）"""
         if self.csv_initialized:
             return
-
         # 此时trainer已被正确赋值，可以安全访问
         self.csv_path = os.path.join(
             self.trainer.cfg.save_path,
             "semantic_segmentation_metrics.csv"
         )
-
         # 创建存储目录
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
-
         # 写入表头
         with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
@@ -137,7 +138,6 @@ class SemSegEvaluator(HookBase):
                 header.append(f'class_{i}_Acc')
             header.extend(['mIoU', 'OA'])
             writer.writerow(header)
-
         self.csv_initialized = True
 
     def after_epoch(self):
@@ -148,7 +148,7 @@ class SemSegEvaluator(HookBase):
             self.eval()
 
     def eval(self):
-        """执行评估并计算指标"""
+        """执行评估并计算指标（新增子批次处理+内存优化）"""
         self.trainer.logger.info(">>>>>>>>>>>>>>>> Start Segmentation Evaluation >>>>>>>>>>>>>>>>")
         self.trainer.model.eval()
 
@@ -160,69 +160,130 @@ class SemSegEvaluator(HookBase):
         num_classes = self.trainer.cfg.data.num_classes
 
         for i, input_dict in enumerate(self.trainer.val_loader):
-            # 数据移至GPU
-            for key in input_dict.keys():
-                if isinstance(input_dict[key], torch.Tensor):
-                    input_dict[key] = input_dict[key].cuda(non_blocking=True)
+            # -------------------------- 步骤1：提取核心数据并移至GPU --------------------------
+            # 先将原始input_dict的核心字段移至GPU（避免子批次重复移动）
+            gpu_input = {}
+            for key in self.core_fields:
+                if key in input_dict and isinstance(input_dict[key], torch.Tensor):
+                    gpu_input[key] = input_dict[key].cuda(non_blocking=True)
+            # 保留非Tensor字段（如origin_coord可能是列表/数组）
+            for key in ["origin_coord", "origin_segment", "origin_offset"]:
+                if key in input_dict:
+                    gpu_input[key] = input_dict[key]
 
-            # 模型推理（无梯度）
-            with torch.no_grad():
-                # 新增：与训练阶段同步启用AMP，依赖配置中的enable_amp
-                with torch.cuda.amp.autocast(enabled=self.trainer.cfg.enable_amp):
-                    output_dict = self.trainer.model(input_dict)  # 前向传播
+            # -------------------------- 步骤2：计算子批次数量 --------------------------
+            # 以coord的点数为基准拆分（点云数据的核心维度）
+            total_points = gpu_input["coord"].shape[0]
+            num_subbatches = (total_points + self.max_points_per_subbatch - 1) // self.max_points_per_subbatch
+            self.trainer.logger.info(f"Batch {i+1}: Total points={total_points}, split into {num_subbatches} subbatches")
 
-            # 获取预测和标签
-            output = output_dict["seg_logits"]  # 分割模型输出
-            loss = output_dict["loss"]
-            pred = output.max(1)[1]  # 取概率最大的类别作为预测
-            label = input_dict["segment"]  # 真实标签
+            # -------------------------- 步骤3：子批次处理 --------------------------
+            # 子批次内累计交并集和损失
+            sub_intersection = None
+            sub_union = None
+            sub_target = None
+            sub_loss = 0.0
 
-            # 处理坐标映射（如果需要）
-            if "origin_coord" in input_dict.keys():
-                idx, _ = pointops.knn_query(
-                    1,
-                    input_dict["coord"].float(),
-                    input_dict["offset"].int(),
-                    input_dict["origin_coord"].float(),
-                    input_dict["origin_offset"].int(),
+            for sb_idx in range(num_subbatches):
+                # 计算当前子批次的索引范围
+                start = sb_idx * self.max_points_per_subbatch
+                end = min((sb_idx + 1) * self.max_points_per_subbatch, total_points)
+                self.trainer.logger.info(f"Subbatch {sb_idx+1}/{num_subbatches}: Processing points [{start}, {end})")
+
+                # -------------------------- 构建子批次输入（关键：不遗漏字段） --------------------------
+                sub_input = {}
+                # 1. 截取Tensor类型的核心字段（coord/segment/grid_coord等）
+                for key in ["coord", "segment", "grid_coord", "feat"]:
+                    if key in gpu_input:
+                        sub_input[key] = gpu_input[key][start:end]
+                # 2. 调整offset（单场景简化：子批次点数即offset值）
+                if "offset" in gpu_input:
+                    sub_input["offset"] = torch.tensor([end - start], device=gpu_input["offset"].device)
+                # 3. 传递原始坐标相关字段（如需映射）
+                for key in ["origin_coord", "origin_segment", "origin_offset"]:
+                    if key in gpu_input:
+                        sub_input[key] = gpu_input[key]
+
+                # -------------------------- 子批次推理（无梯度+AMP） --------------------------
+                with torch.no_grad():
+                    with torch.cuda.amp.autocast(enabled=self.trainer.cfg.enable_amp):
+                        sub_output_dict = self.trainer.model(sub_input)
+
+                # -------------------------- 提取子批次结果 --------------------------
+                sub_output = sub_output_dict["seg_logits"]
+                sub_loss_val = sub_output_dict["loss"].item()
+                sub_pred = sub_output.max(1)[1]
+                sub_label = sub_input["segment"]
+
+                # -------------------------- 处理坐标映射（与原逻辑一致） --------------------------
+                if "origin_coord" in sub_input:
+                    idx, _ = pointops.knn_query(
+                        1,
+                        sub_input["coord"].float(),
+                        sub_input["offset"].int(),
+                        sub_input["origin_coord"].float(),
+                        sub_input["origin_offset"].int(),
+                    )
+                    sub_pred = sub_pred[idx.flatten().long()]
+                    sub_label = sub_input["origin_segment"]
+
+                # -------------------------- 计算子批次交并集 --------------------------
+                sb_inter, sb_union, sb_tgt = intersection_and_union_gpu(
+                    sub_pred,
+                    sub_label,
+                    num_classes,
+                    self.trainer.cfg.data.ignore_index,
                 )
-                pred = pred[idx.flatten().long()]
-                label = input_dict["origin_segment"]
 
-            # 计算当前batch的交并集
-            intersection, union, target = intersection_and_union_gpu(
-                pred,
-                label,
-                num_classes,
-                self.trainer.cfg.data.ignore_index,
-            )
+                # -------------------------- 累计子批次结果 --------------------------
+                # 初始化子批次累计变量
+                if sub_intersection is None:
+                    sub_intersection = sb_inter
+                    sub_union = sb_union
+                    sub_target = sb_tgt
+                else:
+                    sub_intersection += sb_inter
+                    sub_union += sb_union
+                    sub_target += sb_tgt
+                # 按子批次点数加权计算损失（确保总损失准确）
+                sub_loss += sub_loss_val * (end - start) / total_points
 
-            # 多卡训练时汇总结果
+                # -------------------------- 清理子批次内存（关键优化） --------------------------
+                del sub_input, sub_output_dict, sub_output, sub_pred, sub_label
+                del sb_inter, sb_union, sb_tgt
+                torch.cuda.empty_cache()
+
+            # -------------------------- 步骤4：多卡汇总当前批次结果（与原逻辑一致） --------------------------
             if comm.get_world_size() > 1:
-                comm.all_reduce(intersection), comm.all_reduce(union), comm.all_reduce(target)
+                comm.all_reduce(sub_intersection), comm.all_reduce(sub_union), comm.all_reduce(sub_target)
 
-            # 转为numpy并累计
-            intersection = intersection.cpu().numpy()
-            union = union.cpu().numpy()
-            target = target.cpu().numpy()
+            # -------------------------- 步骤5：累计到全局变量（与原逻辑一致） --------------------------
+            sub_inter_np = sub_intersection.cpu().numpy()
+            sub_union_np = sub_union.cpu().numpy()
+            sub_tgt_np = sub_target.cpu().numpy()
 
-            # 初始化累计变量（第一次迭代）
             if total_intersection is None:
-                total_intersection = np.zeros_like(intersection)
-                total_union = np.zeros_like(union)
-                total_target = np.zeros_like(target)
+                total_intersection = np.zeros_like(sub_inter_np)
+                total_union = np.zeros_like(sub_union_np)
+                total_target = np.zeros_like(sub_tgt_np)
 
-            total_intersection += intersection
-            total_union += union
-            total_target += target
-            total_loss += loss.item()
+            total_intersection += sub_inter_np
+            total_union += sub_union_np
+            total_target += sub_tgt_np
+            total_loss += sub_loss
 
-            # 打印当前batch信息
-            info = f"Test: [{i + 1}/{len(self.trainer.val_loader)}] Loss {loss.item():.4f}"
-            if "origin_coord" in input_dict.keys():
+            # -------------------------- 步骤6：打印批次信息（补充子批次数量） --------------------------
+            info = f"Test: [{i + 1}/{len(self.trainer.val_loader)}] Loss {sub_loss:.4f} (subbatches: {num_subbatches})"
+            if "origin_coord" in gpu_input:
                 info = "Interp. " + info
             self.trainer.logger.info(info)
 
+            # -------------------------- 清理当前批次内存（关键优化） --------------------------
+            del gpu_input, sub_intersection, sub_union, sub_target
+            del sub_inter_np, sub_union_np, sub_tgt_np
+            torch.cuda.empty_cache()
+
+        # -------------------------- 后续指标计算/日志/CSV保存（完全保留原逻辑） --------------------------
         # 计算所有指标
         loss_avg = total_loss / len(self.trainer.val_loader)
         iou_class = total_intersection / (total_union + 1e-10)  # 每类IoU
@@ -266,8 +327,7 @@ class SemSegEvaluator(HookBase):
         self.trainer.comm_info["current_metric_name"] = "mIoU"
 
     def _save_to_csv(self, epoch, iou_class, acc_class, m_iou, oa):
-        """将当前轮次的指标保存到CSV"""
-        # 确保表头正确（如果类别数量与初始不同）
+        """将当前轮次的指标保存到CSV（完全保留原逻辑）"""
         if not os.path.exists(self.csv_path):
             self._init_csv()
 
@@ -283,6 +343,7 @@ class SemSegEvaluator(HookBase):
             writer.writerow(row)
 
         self.trainer.logger.info(f"Metrics saved to CSV: {self.csv_path}")
+
 
 @HOOKS.register_module()
 class InsSegEvaluator(HookBase):
