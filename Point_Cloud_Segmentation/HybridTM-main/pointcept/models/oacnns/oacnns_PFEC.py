@@ -452,8 +452,8 @@ class DownBlock(nn.Module):
     def forward(self, x):
         block_id = id(self) % 1000
         start_time = time.time()
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"DownBlock {block_id} start - features shape: {x.features.shape}")
+        # if logger.isEnabledFor(logging.INFO):
+        #     logger.info(f"DownBlock {block_id} start - features shape: {x.features.shape}")
 
         # 下采样
         x = self.down(x)
