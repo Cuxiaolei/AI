@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-batch_size = 100  # bs: total bs in all gpus
+batch_size = 3  # bs: total bs in all gpus
 mix_prob = 0.8
 empty_cache = True
 enable_amp = True  # 混合精度训练，加速训练且节省显存
@@ -62,12 +62,10 @@ model = dict(
             memory_safe_mode=True  # 启用内存安全模式
         )
     ],
-    # 可选：添加类别权重，解决数据不平衡（若电力线样本少，可设更高权重）
-    # class_weight=[1.0, 1.0, 1.2]  # [电力塔权重, 背景权重, 电力线权重]，根据数据集统计调整
 )
 
 # 训练参数：保持原配置逻辑，适配改进模型复杂度
-epoch = 3  # 总训练轮次，可根据收敛情况调整（改进模型可能需120-150轮）
+epoch = 100  # 总训练轮次，可根据收敛情况调整（改进模型可能需120-150轮）
 optimizer = dict(type="AdamW", lr=0.001, weight_decay=0.02)  # AdamW优化器，抑制过拟合
 scheduler = dict(
     type="OneCycleLR",  # OneCycle学习率调度，快速收敛且泛化性好
