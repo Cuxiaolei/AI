@@ -6,7 +6,7 @@ import spconv.pytorch as spconv
 from functools import partial
 from timm.models.layers import trunc_normal_
 
-from pointcept.models.builder import MODELS, LOSSES
+from pointcept.models.builder import MODELS
 from pointcept.models.utils import offset2batch
 from torch_geometric.nn.pool import voxel_grid
 from torch_geometric.utils import scatter
