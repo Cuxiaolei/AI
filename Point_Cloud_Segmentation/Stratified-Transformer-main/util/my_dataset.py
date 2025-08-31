@@ -115,7 +115,7 @@ class MyDataset(Dataset):
         if isinstance(processed_label, np.ndarray):
             processed_label = torch.from_numpy(processed_label).long()
 
-        print(f"feat shape before model: {processed_feat.shape}")
+        # print(f"feat shape before model: {processed_feat.shape}")
         return processed_coord, processed_feat, processed_label
 
     def __len__(self):
