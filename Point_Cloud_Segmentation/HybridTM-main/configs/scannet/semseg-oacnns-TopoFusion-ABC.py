@@ -26,9 +26,9 @@ model = dict(
         # 创新点1: 拓扑感知图卷积（PL-TopoConv）配置
         use_pl_topoconv=True,
         pl_topoconv_kwargs=dict(
-            k=8,  # KNN邻居数量
+            k=16,  # KNN邻居数量
             angle_weight=1.0,  # 法向一致性权重
-            curvature_weight=0.5  # 曲率权重
+            curvature_weight=1.0  # 曲率权重
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
@@ -46,10 +46,10 @@ model = dict(
         dict(
             type="PLPLELoss",
             ignore_index=-1,
-            pseudo_threshold=0.5,  # 伪标签置信度阈值
-            curvature_threshold=0.15,  # 曲率阈值
-            pseudo_weight=0.5,  # 伪标签损失权重
-            physical_weight=0.4  # 物理先验权重
+            pseudo_threshold=0.6,  # 伪标签置信度阈值
+            curvature_threshold=0.1,  # 曲率阈值
+            pseudo_weight=0.3,  # 伪标签损失权重
+            physical_weight=0.2  # 物理先验权重
         )
     ],
 )
