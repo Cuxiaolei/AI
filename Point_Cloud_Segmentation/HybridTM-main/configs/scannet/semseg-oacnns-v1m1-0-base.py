@@ -106,7 +106,7 @@ data = dict(
                 return_min_coord=True,
             ),
             # dict(type="SphereCrop", point_max=1000000, mode='center'),
-            dict(type="SphereCrop", point_max=20000, mode="center"),
+            # dict(type="SphereCrop", point_max=20000, mode="center"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ToTensor"),
