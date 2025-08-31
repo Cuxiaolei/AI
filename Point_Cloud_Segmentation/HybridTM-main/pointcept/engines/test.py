@@ -158,12 +158,15 @@ class SemSegTester(TesterBase):
         comm.synchronize()
 
         record = {}
+        # 初始化混淆矩阵（num_classes x num_classes）
+        num_classes = self.cfg.data.num_classes
+        confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+
         # 碎片推理
         for idx, data_dict in enumerate(self.test_loader):
             end = time.time()
-            # 处理批次数据（关键修改）
+            # 处理批次数据
             if isinstance(data_dict, list):
-                # 如果是列表，取第一个元素（假设batch_size=1）
                 data_dict = data_dict[0]
 
             fragment_list = data_dict.pop("fragment_list")
@@ -227,9 +230,8 @@ class SemSegTester(TesterBase):
                     delimiter=",",
                     fmt="%d",
                 )
-                pred = pred[:, 0]  # 用于mIoU计算，后续可支持top3 mIoU
+                pred = pred[:, 0]  # 用于mIoU计算
             elif self.cfg.data.test.type == "SemanticKITTIDataset":
-                # 00_000000 -> 00, 000000
                 sequence_name, frame_name = data_name.split("_")
                 os.makedirs(
                     os.path.join(
@@ -273,6 +275,16 @@ class SemSegTester(TesterBase):
                 intersection=intersection, union=union, target=target
             )
 
+            # 更新混淆矩阵（过滤掉忽略的标签）
+            valid_mask = segment != self.cfg.data.ignore_index
+            valid_pred = pred[valid_mask]
+            valid_segment = segment[valid_mask]
+
+            # 高效计算混淆矩阵（使用bincount）
+            indices = valid_segment * num_classes + valid_pred
+            counts = np.bincount(indices, minlength=num_classes ** 2)
+            confusion_matrix += counts.reshape(num_classes, num_classes)
+
             mask = union != 0
             iou_class = intersection / (union + 1e-10)
             iou = np.mean(iou_class[mask]) if mask.any() else 0.0
@@ -292,6 +304,8 @@ class SemSegTester(TesterBase):
         logger.info("Syncing ...")
         comm.synchronize()
         record_sync = comm.gather(record, dst=0)
+        # 收集所有进程的混淆矩阵
+        confusion_matrix_list = comm.gather(confusion_matrix, dst=0)
 
         if comm.is_main_process():
             # 合并所有进程的记录
@@ -300,6 +314,11 @@ class SemSegTester(TesterBase):
                 r = record_sync.pop()
                 record.update(r)
                 del r
+
+            # 合并所有进程的混淆矩阵
+            total_confusion = np.sum(confusion_matrix_list, axis=0)
+            # 计算每类的预测占比（行归一化）
+            confusion_norm = total_confusion / (total_confusion.sum(axis=1, keepdims=True) + 1e-10)
 
             # 计算总体指标
             intersection = np.sum(
@@ -331,56 +350,65 @@ class SemSegTester(TesterBase):
                 class_names = [f"Class_{i}" for i in range(num_classes)]
                 logger.warning("Class names not properly defined in config, using default names")
 
-            # 写入CSV文件
+            # 写入常规测试结果CSV（保持不变）
             with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-
-                # 表头
                 header = ["Scene_Name"]
-                # 每类IOU
                 for i in range(num_classes):
                     header.append(f"Class_{i}_IOU({class_names[i]})")
-                # 每类Accuracy
                 for i in range(num_classes):
                     header.append(f"Class_{i}_ACC({class_names[i]})")
-                # 场景级指标
                 header.extend(["Scene_mIoU", "Scene_OA"])
                 writer.writerow(header)
 
-                # 写入每个场景的数据
                 for scene_name, metrics in record.items():
                     inter = metrics["intersection"]
                     union = metrics["union"]
                     target = metrics["target"]
-
-                    # 计算场景级指标
                     scene_iou = inter / (union + 1e-10)
                     scene_acc = inter / (target + 1e-10)
-
-                    # 计算场景mIoU（忽略无标注的类别）
                     valid_mask = union != 0
                     valid_iou = scene_iou[valid_mask]
                     scene_miou = np.mean(valid_iou) if valid_iou.size > 0 else 0.0
-
-                    # 计算场景整体准确率
                     scene_oa = np.sum(inter) / (np.sum(target) + 1e-10)
-
-                    # 构建行数据
                     row = [scene_name]
                     row.extend([f"{x:.4f}" for x in scene_iou])
                     row.extend([f"{x:.4f}" for x in scene_acc])
                     row.extend([f"{scene_miou:.4f}", f"{scene_oa:.4f}"])
                     writer.writerow(row)
 
-                # 写入全局平均值
                 avg_row = ["Global_Average"]
                 avg_row.extend([f"{x:.4f}" for x in iou_class])
                 avg_row.extend([f"{x:.4f}" for x in accuracy_class])
                 avg_row.extend([f"{mIoU:.4f}", f"{allAcc:.4f}"])
                 writer.writerow(avg_row)
 
+            # 新增：保存混淆矩阵
+            conf_matrix_path = os.path.join(save_path, "confusion_matrix.csv")
+            with open(conf_matrix_path, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # 表头：预测类别
+                header = ["Actual/Predicted"] + [f"Class_{i}({class_names[i]})" for i in range(num_classes)]
+                writer.writerow(header)
+                # 内容：实际类别对应的预测分布
+                for i in range(num_classes):
+                    row = [f"Class_{i}({class_names[i]})"] + total_confusion[i].tolist()
+                    writer.writerow(row)
+
+            # 新增：保存归一化混淆矩阵（每类预测占比）
+            conf_norm_path = os.path.join(save_path, "confusion_matrix_normalized.csv")
+            with open(conf_norm_path, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                header = ["Actual/Predicted"] + [f"Class_{i}({class_names[i]})" for i in range(num_classes)]
+                writer.writerow(header)
+                for i in range(num_classes):
+                    row = [f"Class_{i}({class_names[i]})"] + [f"{x:.4f}" for x in confusion_norm[i]]
+                    writer.writerow(row)
+
             # 打印日志
             logger.info(f"Test results saved to CSV: {csv_path}")
+            logger.info(f"Confusion matrix saved to: {conf_matrix_path}")
+            logger.info(f"Normalized confusion matrix (proportion) saved to: {conf_norm_path}")
             logger.info(
                 "Val result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}".format(
                     mIoU, mAcc, allAcc
