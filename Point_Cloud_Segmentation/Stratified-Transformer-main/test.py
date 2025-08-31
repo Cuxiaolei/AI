@@ -223,6 +223,9 @@ def test(model, criterion, names, test_transform):
     union_meter = AverageMeter()
     target_meter = AverageMeter()
 
+    # 初始化混淆矩阵 (3x3)
+    confusion_matrix = np.zeros((args.classes, args.classes), dtype=np.int64)
+
     model.eval()
     check_makedirs(args.save_folder)
     pred_save, label_save = [], []
@@ -340,6 +343,15 @@ def test(model, criterion, names, test_transform):
         union_meter.update(union)
         target_meter.update(target)
 
+        # 更新混淆矩阵（过滤掉忽略的标签）
+        label_np = label.numpy()
+        mask = (label_np != args.ignore_label)
+        valid_pred = pred[mask]
+        valid_label = label_np[mask]
+
+        for true_label, pred_label in zip(valid_label, valid_pred):
+            confusion_matrix[true_label, pred_label] += 1
+
         accuracy = sum(intersection) / (sum(target) + 1e-10)
         batch_time.update(time.time() - end)
         logger.info(
@@ -373,18 +385,31 @@ def test(model, criterion, names, test_transform):
             f'IoU={iou_class[i]:.4f}, Accuracy={accuracy_class[i]:.4f}'
         )
 
-    csv_path = os.path.join(args.save_folder, 'test_metrics.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Metric', 'Value'])
-        writer.writerow(['mIoU', f'{mIoU:.4f}'])
-        writer.writerow(['mAcc', f'{mAcc:.4f}'])
-        writer.writerow(['allAcc', f'{allAcc:.4f}'])
-        writer.writerow([])
-        writer.writerow(['Class', 'Name', 'IoU', 'Accuracy'])
-        for i in range(args.classes):
-            writer.writerow([i, names[i], f'{iou_class[i]:.4f}', f'{accuracy_class[i]:.4f}'])
+    # 计算每类的预测占比（混淆矩阵归一化）
+    row_sums = confusion_matrix.sum(axis=1, keepdims=True)
+    # 避免除零错误
+    row_sums[row_sums == 0] = 1
+    pred_proportion = confusion_matrix / row_sums
 
+    # 保存混淆矩阵和预测占比到CSV
+    cm_csv_path = os.path.join(args.save_folder, 'confusion_matrix.csv')
+    with open(cm_csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        # 写入表头
+        writer.writerow([''] + [f'预测为{name}' for name in names])
+
+        # 写入混淆矩阵数据
+        writer.writerow(['混淆矩阵（数量）'] + [''] * args.classes)
+        for i in range(args.classes):
+            writer.writerow([f'实际为{names[i]}'] + confusion_matrix[i].tolist())
+
+        # 写入预测占比数据
+        writer.writerow([])
+        writer.writerow(['预测占比（比例）'] + [''] * args.classes)
+        for i in range(args.classes):
+            writer.writerow([f'实际为{names[i]}'] + [f'{p:.4f}' for p in pred_proportion[i]])
+
+    logger.info(f"混淆矩阵及预测占比已保存至 {cm_csv_path}")
     logger.info('<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<')
 
 
