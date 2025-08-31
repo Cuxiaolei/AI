@@ -32,7 +32,7 @@ TRAIN:
   concat_xyz: False
   grid_size: 0.04
   max_batch_points: 30000
-  max_num_neighbors: 16 # For KPConv
+  max_num_neighbors: 32 # For KPConv
   ratio: 0.25
   k: 16
 
