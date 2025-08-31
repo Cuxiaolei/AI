@@ -52,7 +52,7 @@ TRAIN:
   workers: 8  # data loader workers
   batch_size: 3  # batch size for training
   batch_size_val: 1  # batch size for validation during training, memory and speed tradeoff
-  base_lr: 0.001
+  base_lr: 0.006
   epochs: 100
   start_epoch: 0
   step_epoch: 30
