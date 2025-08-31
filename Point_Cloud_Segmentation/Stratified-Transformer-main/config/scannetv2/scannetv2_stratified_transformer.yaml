@@ -6,7 +6,7 @@ DATA:
   fea_dim: 6
   in_channels: 6
   voxel_size: 0.04
-  voxel_max: 10000
+  voxel_max: 40000
   shuffle: True
   loop: 1
 
@@ -31,7 +31,7 @@ TRAIN:
   drop_path_rate: 0.3
   concat_xyz: False
   grid_size: 0.04
-  max_batch_points: 30000
+  max_batch_points: 120000
   max_num_neighbors: 32 # For KPConv
   ratio: 0.25
   k: 16
