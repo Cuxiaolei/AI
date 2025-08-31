@@ -24,40 +24,6 @@ plt.rcParams['savefig.bbox'] = 'tight'
 plt.rcParams['savefig.pad_inches'] = 0.1
 
 
-def generate_sample_data(num_epochs=100, num_models=7):
-    """生成7个模型的示例数据"""
-    np.random.seed(42)
-
-    models_data = {}
-
-    for i in range(num_models):
-        model_name = f"Model {i + 1}"
-
-        # 生成miou数据
-        base_miou = 0.45 + (i * 0.03)
-        final_miou = 0.8 + (i * 0.02)
-        if final_miou > 0.95:
-            final_miou = 0.95
-        miou = np.linspace(base_miou, final_miou, num_epochs)
-        miou += np.random.normal(0, 0.007, num_epochs).cumsum() * 0.1
-        miou = np.clip(miou, 0, 1)
-
-        # 生成oa数据
-        base_oa = base_miou + 0.05 + (i * 0.02)
-        final_oa = final_miou + 0.05 + (i * 0.01)
-        if final_oa > 0.98:
-            final_oa = 0.98
-        oa = np.linspace(base_oa, final_oa, num_epochs)
-        oa += np.random.normal(0, 0.005, num_epochs).cumsum() * 0.1
-        oa = np.clip(oa, 0, 1)
-
-        models_data[model_name] = {
-           'miou': miou,
-            'oa': oa
-        }
-
-    return models_data
-
 
 def plot_miou_curve(models_data, num_epochs=100, save_path=None,
                     title="mIoU Convergence Curves"):
@@ -69,7 +35,7 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     # 7个清晰区分的颜色
     colors = [
         '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-        '#9467bd', '#8c564b', '#e377c2'
+        '#9467bd', '#8c564b', '#e377c2', '#7f7fff',
     ]
 
     epochs = np.arange(1, num_epochs + 1)
@@ -213,8 +179,8 @@ def load_data_from_csv(file_path):
                 model_names.append(model_name)
 
     # 确保读取到7个模型
-    if len(model_names) != 7:
-        print(f"警告: 检测到{len(model_names)}个模型，而不是预期的7个")
+    if len(model_names) != 8:
+        print(f"警告: 检测到{len(model_names)}个模型，而不是预期的8个")
 
     for model in model_names:
         miou_col = f"{model}_miou"

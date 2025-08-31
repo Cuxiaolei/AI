@@ -22,6 +22,7 @@ class PLPLELoss(nn.Module):
     def forward(self, preds, targets, curvatures=None, **kwargs):
         # 如果没有曲率信息，返回0损失（不影响基础损失）
         if curvatures is None:
+            print("基础曲率为0")
             return torch.tensor(0.0, device=preds.device)
 
         # 计算预测概率
