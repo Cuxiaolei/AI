@@ -46,10 +46,10 @@ model = dict(
         dict(
             type="PLPLELoss",
             ignore_index=-1,
-            pseudo_threshold=0.6,  # 伪标签置信度阈值
-            curvature_threshold=0.1,  # 曲率阈值
-            pseudo_weight=0.3,  # 伪标签损失权重
-            physical_weight=0.2  # 物理先验权重
+            pseudo_threshold=0.5,  # 伪标签置信度阈值
+            curvature_threshold=0.15,  # 曲率阈值
+            pseudo_weight=0.5,  # 伪标签损失权重
+            physical_weight=0.4  # 物理先验权重
         )
     ],
 )
