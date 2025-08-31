@@ -158,12 +158,16 @@ class SemSegTester(TesterBase):
         comm.synchronize()
 
         record = {}
+        # 初始化混淆矩阵 (num_classes x num_classes)
+        num_classes = self.cfg.data.num_classes
+        ignore_index = self.cfg.data.ignore_index
+        confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+
         # 碎片推理
         for idx, data_dict in enumerate(self.test_loader):
             end = time.time()
-            # 处理批次数据（关键修改）
+            # 处理批次数据
             if isinstance(data_dict, list):
-                # 如果是列表，取第一个元素（假设batch_size=1）
                 data_dict = data_dict[0]
 
             fragment_list = data_dict.pop("fragment_list")
@@ -227,9 +231,8 @@ class SemSegTester(TesterBase):
                     delimiter=",",
                     fmt="%d",
                 )
-                pred = pred[:, 0]  # 用于mIoU计算，后续可支持top3 mIoU
+                pred = pred[:, 0]  # 用于mIoU计算
             elif self.cfg.data.test.type == "SemanticKITTIDataset":
-                # 00_000000 -> 00, 000000
                 sequence_name, frame_name = data_name.split("_")
                 os.makedirs(
                     os.path.join(
@@ -273,6 +276,14 @@ class SemSegTester(TesterBase):
                 intersection=intersection, union=union, target=target
             )
 
+            # 更新混淆矩阵 (过滤掉ignore_index的样本)
+            mask = segment != ignore_index
+            valid_segment = segment[mask]
+            valid_pred = pred[mask]
+            for t, p in zip(valid_segment, valid_pred):
+                if 0 <= t < num_classes and 0 <= p < num_classes:
+                    confusion_matrix[t, p] += 1
+
             mask = union != 0
             iou_class = intersection / (union + 1e-10)
             iou = np.mean(iou_class[mask]) if mask.any() else 0.0
@@ -292,6 +303,16 @@ class SemSegTester(TesterBase):
         logger.info("Syncing ...")
         comm.synchronize()
         record_sync = comm.gather(record, dst=0)
+
+        # 同步混淆矩阵 (分布式环境下)
+        if comm.get_world_size() > 1:
+            # 收集所有进程的混淆矩阵
+            confusion_list = comm.gather(confusion_matrix, dst=0)
+            if comm.is_main_process():
+                confusion_matrix = np.sum(confusion_list, axis=0)
+        else:
+            if comm.is_main_process():
+                pass  # 单进程直接使用当前混淆矩阵
 
         if comm.is_main_process():
             # 合并所有进程的记录
@@ -331,7 +352,7 @@ class SemSegTester(TesterBase):
                 class_names = [f"Class_{i}" for i in range(num_classes)]
                 logger.warning("Class names not properly defined in config, using default names")
 
-            # 写入CSV文件
+            # 写入主结果CSV
             with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
 
@@ -379,8 +400,37 @@ class SemSegTester(TesterBase):
                 avg_row.extend([f"{mIoU:.4f}", f"{allAcc:.4f}"])
                 writer.writerow(avg_row)
 
+            # 保存混淆矩阵到单独的CSV
+            conf_matrix_path = os.path.join(save_path, "confusion_matrix.csv")
+            with open(conf_matrix_path, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+
+                # 混淆矩阵表头：第一列是真实类别，后续列是预测类别
+                header = ["True Class"] + [f"Pred_{class_names[i]}" for i in range(num_classes)]
+                writer.writerow(header)
+
+                # 写入混淆矩阵内容
+                for i in range(num_classes):
+                    row = [class_names[i]] + confusion_matrix[i].tolist()
+                    writer.writerow(row)
+
+                # 写入每类的统计指标（准确率、IoU等）
+                writer.writerow([])  # 空行分隔
+                writer.writerow(["Metric", "Value"] + [class_names[i] for i in range(num_classes)])
+                writer.writerow(["IoU"] + [""] + [f"{x:.4f}" for x in iou_class])
+                writer.writerow(["Accuracy"] + [""] + [f"{x:.4f}" for x in accuracy_class])
+
+                # 计算并写入每类的召回率（True Positive Rate）
+                recall = np.diag(confusion_matrix) / (np.sum(confusion_matrix, axis=1) + 1e-10)
+                writer.writerow(["Recall"] + [""] + [f"{x:.4f}" for x in recall])
+
+                # 计算并写入每类的精确率（Precision）
+                precision = np.diag(confusion_matrix) / (np.sum(confusion_matrix, axis=0) + 1e-10)
+                writer.writerow(["Precision"] + [""] + [f"{x:.4f}" for x in precision])
+
             # 打印日志
             logger.info(f"Test results saved to CSV: {csv_path}")
+            logger.info(f"Confusion matrix saved to CSV: {conf_matrix_path}")
             logger.info(
                 "Val result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}".format(
                     mIoU, mAcc, allAcc
@@ -492,7 +542,7 @@ class ClsVotingTester(TesterBase):
         metric="allAcc",
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(** kwargs)
         self.num_repeat = num_repeat
         self.metric = metric
         self.best_idx = 0
@@ -528,14 +578,6 @@ class ClsVotingTester(TesterBase):
             voting_list = data_dict.pop("voting_list")
             category = data_dict.pop("category")
             data_name = data_dict.pop("name")
-            # pred = torch.zeros([1, self.cfg.data.num_classes]).cuda()
-            # for i in range(len(voting_list)):
-            #     input_dict = voting_list[i]
-            #     for key in input_dict.keys():
-            #         if isinstance(input_dict[key], torch.Tensor):
-            #             input_dict[key] = input_dict[key].cuda(non_blocking=True)
-            #     with torch.no_grad():
-            #         pred += F.softmax(self.model(input_dict)["cls_logits"], -1)
             input_dict = collate_fn(voting_list)
             for key in input_dict.keys():
                 if isinstance(input_dict[key], torch.Tensor):
@@ -712,12 +754,12 @@ class SemSegVisualization(TesterBase):
         make_dirs(save_path)
         comm.is_main_process()
         assert self.cfg.data.test.type == "ScanNetDataset" or "NuScenesDataset", "Wrong Dataset"
-        
+
         comm.synchronize()
         record = {}
         for idx, data_dict in enumerate(self.test_loader.dataset):
             end = time.time()
-        
+
             # data_dict = data_dict[0]  # current assume batch size is 1
             fragment_list = data_dict.pop("fragment_list")
             segment = data_dict.pop("segment")
@@ -776,10 +818,7 @@ class SemSegVisualization(TesterBase):
                     coords_all = coords_all[data_dict["inverse"]]
                     segment = data_dict["origin_segment"]
                 # np.save(pred_save_path, pred)
-            
-            # import ipdb; ipdb.set_trace()
-            # save_point_cloud(coords_all, pred, file_path=save_path + "pred.ply")
-            # save_point_cloud(segment, file_path=save_path + "pred.ply")
+
             colors = [
                 [0.1, 0.2, 0.3],   # 蓝色调
                 [0.3, 0.1, 0.4],   # 紫色调
@@ -802,37 +841,24 @@ class SemSegVisualization(TesterBase):
                 [0.1, 0.9, 0.7],   # 明亮的薄荷绿
                 [0.3, 0.3, 0.6],   # 暗紫色
             ]
-            mask = np.where(segment != -1)[0] 
-            
+            mask = np.where(segment != -1)[0]
+
             colors_pred = np.array(colors)[pred[mask]]
             colors_gt = np.array(colors)[segment[mask]]
 
-            # import ipdb; ipdb.set_trace() 
             if True:
                 points = coords_all.cpu().numpy()[mask]
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(points)
                 point_cloud.paint_uniform_color([0.5, 0.5, 0.5])
                 point_cloud.colors = o3d.utility.Vector3dVector(colors_gt)
-                # vis = o3d.visualization.Visualizer()
-                # vis.create_window()
-                # for point_cloud in point_clouds:
-                #     vis.add_geometry(point_cloud)
-                # vis.get_render_option().point_size = 2
-                # vis.run()
-                # vis.destroy_window()
                 o3d.io.write_point_cloud(save_path + f"/pred_{idx}.ply", point_cloud, write_ascii=False, compressed=False, print_progress=False)
-                # o3d.visualization.draw_geometries([point_cloud],
-                #                   zoom=0.3412,
-                #                   front=[0.4257, -0.2125, -0.8795],
-                #                   lookat=[2.6172, 2.0475, 1.532],
-                #                   up=[-0.0694, -0.9768, 0.2024])
             if idx > 100:
                 exit()
-                
-                
+
+
 @TESTERS.register_module()
 class SemSegVisualizationLoad(TesterBase):
     def test(self):
-        assert self.cfg.data.test.type == "NuScenesDataset" 
-        pass 
+        assert self.cfg.data.test.type == "NuScenesDataset"
+        pass
