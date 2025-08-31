@@ -230,7 +230,7 @@ class OACNNs(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.num_classes = num_classes
-        self.num_stages = len(   )
+        self.num_stages = len(enc_channels)
         self.embed_channels = embed_channels
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
