@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 # 设置字体和样式
-plt.rcParams['font.family'] = ['Times New Roman','serif']
+plt.rcParams['font.family'] = ['Times New Roman', 'serif']
 plt.rcParams['font.size'] = 14
 plt.rcParams['axes.titlesize'] = 16
 plt.rcParams['axes.labelsize'] = 14
@@ -24,7 +24,6 @@ plt.rcParams['savefig.bbox'] = 'tight'
 plt.rcParams['savefig.pad_inches'] = 0.1
 
 
-
 def plot_miou_curve(models_data, num_epochs=100, save_path=None,
                     title="mIoU Convergence Curves"):
     """绘制mIoU曲线（确保图例完整显示）"""
@@ -32,10 +31,10 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     plt.figure(figsize=(10, 7))
     ax = plt.gca()
 
-    # 7个清晰区分的颜色
+    # 8个清晰区分的颜色
     colors = [
-        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-        '#9467bd', '#8c564b', '#e377c2', '#7f7fff',
+        '#1f77b4', '#9467bd', '#2ca02c', '#7f7fff',
+        '#ff7f0e', '#8c564b', '#e377c2', '#d62728',
     ]
 
     epochs = np.arange(1, num_epochs + 1)
@@ -43,7 +42,16 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     # 遍历模型绘制曲线
     for i, (model_name, metrics) in enumerate(models_data.items()):
         color = colors[i % len(colors)]
-        plt.plot(epochs, metrics['miou'] * 100, label=model_name, color=color, linestyle='-')
+
+        # 第5个(索引4)和第8个(索引7)颜色加重，其他变浅色
+        if i == 4 or i == 7:
+            # 加重：更粗的线条和不透明
+            plt.plot(epochs, metrics['miou'] * 100, label=model_name,
+                     color=color, linestyle='-', linewidth=1.5, alpha=1.0)
+        else:
+            # 浅色：较细的线条和半透明
+            plt.plot(epochs, metrics['miou'] * 100, label=model_name,
+                     color=color, linestyle='-', linewidth=1.0, alpha=0.8)
 
     # 设置图表属性
     plt.title(title)
@@ -65,7 +73,7 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     plt.grid(False)
 
     # 调整子图参数，为右下角图例留出更多空间
-    plt.subplots_adjust(right=0.75, bottom=0.2)  # 关键修改：减小右和底部边距
+    plt.subplots_adjust(right=0.75, bottom=0.2)
 
     # 图例设置：右下角，两列，确保不被裁剪
     plt.legend(
@@ -73,7 +81,7 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
         ncol=2,
         frameon=False,
         columnspacing=0.8,
-        bbox_to_anchor=(1.0, 0.0)  # 精确控制图例位置
+        bbox_to_anchor=(1.0, 0.0)
     )
 
     # 保存图片时确保包含完整图例
@@ -82,12 +90,11 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
         file_name = f"miou_{timestamp}.png"
         full_path = os.path.join(save_path, file_name)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        # 使用bbox_inches确保图例不被裁剪
         plt.savefig(
             full_path,
             dpi=600,
             bbox_inches='tight',
-            pad_inches=0.3,  # 增加边距确保图例完整
+            pad_inches=0.3,
             pil_kwargs=dict(quality=95)
         )
         print(f"mIoU图表已保存至: {full_path}")
@@ -99,13 +106,13 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
                   title=""):
     """绘制OA曲线（确保图例完整显示）"""
     # 增大图表尺寸
-    plt.figure(figsize=(10, 7))
+    plt.figure(figsize=(10, 8))
     ax = plt.gca()
 
-    # 与mIoU保持一致的颜色
+    # 8个清晰区分的颜色
     colors = [
-        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-        '#9467bd', '#8c564b', '#e377c2'
+        '#1f77b4', '#9467bd', '#2ca02c', '#7f7fff',
+        '#ff7f0e', '#8c564b', '#e377c2', '#d62728',
     ]
 
     epochs = np.arange(1, num_epochs + 1)
@@ -113,7 +120,16 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
     # 遍历模型绘制曲线
     for i, (model_name, metrics) in enumerate(models_data.items()):
         color = colors[i % len(colors)]
-        plt.plot(epochs, metrics['oa'] * 100, label=model_name, color=color, linestyle='-')
+
+        # 第5个(索引4)和第8个(索引7)颜色加重，其他变浅色
+        if i == 4 or i == 7:
+            # 加重：更粗的线条和不透明
+            plt.plot(epochs, metrics['oa'] * 100, label=model_name,
+                     color=color, linestyle='-', linewidth=1.5, alpha=1.0)
+        else:
+            # 浅色：较细的线条和半透明
+            plt.plot(epochs, metrics['oa'] * 100, label=model_name,
+                     color=color, linestyle='-', linewidth=1.0, alpha=0.8)
 
     # 设置图表属性
     plt.title(title)
@@ -165,7 +181,7 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
 
 
 def load_data_from_csv(file_path):
-    """从CSV加载7个模型的数据（按顺序加载）"""
+    """从CSV加载模型的数据"""
     df = pd.read_csv(file_path)
 
     models_data = {}
@@ -178,7 +194,7 @@ def load_data_from_csv(file_path):
             if model_name not in model_names:
                 model_names.append(model_name)
 
-    # 确保读取到7个模型
+    # 检查模型数量
     if len(model_names) != 8:
         print(f"警告: 检测到{len(model_names)}个模型，而不是预期的8个")
 
@@ -188,7 +204,7 @@ def load_data_from_csv(file_path):
 
         if miou_col in df.columns and oa_col in df.columns:
             models_data[model] = {
-               'miou': df[miou_col].values,
+                'miou': df[miou_col].values,
                 'oa': df[oa_col].values
             }
 
@@ -213,7 +229,5 @@ def main():
         save_path="../z_picture/",
         title=""
     )
-
-
 if __name__ == "__main__":
     main()
