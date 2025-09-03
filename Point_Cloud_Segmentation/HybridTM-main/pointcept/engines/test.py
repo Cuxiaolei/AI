@@ -180,7 +180,10 @@ class SemSegTester(TesterBase):
             if isinstance(data_dict, list):
                 data_dict = data_dict[0]
 
-            # 提取fragment_list并添加日志
+            # 先提取data_name，确保后续日志可以正常使用
+            data_name = data_dict.pop("name")  # 提前获取data_name
+
+            # 提取fragment_list并添加日志（此时data_name已定义）
             fragment_list = data_dict.pop("fragment_list")
             # 日志：fragment_list基本信息
             logger.debug(f"[{data_name}] fragment_list 长度: {len(fragment_list)}")
@@ -197,8 +200,8 @@ class SemSegTester(TesterBase):
                 last_fragment = fragment_list[-1]
                 logger.debug(f"[{data_name}] 最后一个fragment类型: {type(last_fragment)}")
 
+            # 提取segment（调整到data_name之后）
             segment = data_dict.pop("segment")
-            data_name = data_dict.pop("name")
             pred_save_path = os.path.join(save_path, "{}_pred.npy".format(data_name))
 
             # 新增：初始化坐标存储
@@ -222,6 +225,7 @@ class SemSegTester(TesterBase):
 
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
+
 
             else:
                 pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
