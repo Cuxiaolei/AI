@@ -199,6 +199,7 @@ class SemSegTester(TesterBase):
                     logger.debug(f"前5个点的坐标: {coords_all[:5]}")  # 查看是否全为[0,0,0]
                 elif "points" in data_dict:  # 有些数据集可能用points存储坐标
                     coords_all = data_dict["points"][:, :3].cpu().numpy()
+                    logger.debug(f"前5个点的坐标: {coords_all[:5]}")  # 查看是否全为[0,0,0]
 
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
