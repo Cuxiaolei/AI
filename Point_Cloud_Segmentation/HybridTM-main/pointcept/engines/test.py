@@ -180,7 +180,23 @@ class SemSegTester(TesterBase):
             if isinstance(data_dict, list):
                 data_dict = data_dict[0]
 
+            # 提取fragment_list并添加日志
             fragment_list = data_dict.pop("fragment_list")
+            # 日志：fragment_list基本信息
+            logger.debug(f"[{data_name}] fragment_list 长度: {len(fragment_list)}")
+            if len(fragment_list) > 0:
+                # 日志：第一个元素的类型和关键键名
+                first_fragment = fragment_list[0]
+                logger.debug(f"[{data_name}] 第一个fragment类型: {type(first_fragment)}")
+                if isinstance(first_fragment, dict):
+                    logger.debug(f"[{data_name}] 第一个fragment包含键: {list(first_fragment.keys())}")
+                    # 检查是否有坐标相关的键
+                    coord_keys = [k for k in first_fragment.keys() if k in ["coord", "points", "xyz"]]
+                    logger.debug(f"[{data_name}] fragment中可能的坐标键: {coord_keys}")
+                # 日志：最后一个元素的基本信息（避免过长）
+                last_fragment = fragment_list[-1]
+                logger.debug(f"[{data_name}] 最后一个fragment类型: {type(last_fragment)}")
+
             segment = data_dict.pop("segment")
             data_name = data_dict.pop("name")
             pred_save_path = os.path.join(save_path, "{}_pred.npy".format(data_name))
@@ -196,13 +212,17 @@ class SemSegTester(TesterBase):
                 # 新增：从数据字典加载坐标（根据实际数据集键名调整）
                 if "coord" in data_dict:
                     coords_all = data_dict["coord"].cpu().numpy()
-                    logger.debug(f"前5个点的坐标: {coords_all[:5]}")  # 查看是否全为[0,0,0]
+                    logger.debug(f"[{data_name}] 从data_dict['coord']加载坐标，前5个点: {coords_all[:5]}")
                 elif "points" in data_dict:  # 有些数据集可能用points存储坐标
                     coords_all = data_dict["points"][:, :3].cpu().numpy()
-                    logger.debug(f"前5个点的坐标: {coords_all[:5]}")  # 查看是否全为[0,0,0]
+                    logger.debug(f"[{data_name}] 从data_dict['points']加载坐标，前5个点: {coords_all[:5]}")
+                else:
+                    # 新增：如果没有找到坐标键，明确输出日志
+                    logger.warning(f"[{data_name}] data_dict中未找到'coord'或'points'键，无法加载坐标")
 
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
+
             else:
                 pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
                 # 新增：初始化GPU坐标存储
