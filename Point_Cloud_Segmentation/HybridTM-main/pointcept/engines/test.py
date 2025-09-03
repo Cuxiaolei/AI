@@ -208,20 +208,28 @@ class SemSegTester(TesterBase):
             coords_all = np.zeros((segment.size, 3), dtype=np.float32)
 
             if os.path.isfile(pred_save_path):
-                logger.info(
-                    f"{idx + 1}/{len(self.test_loader)}: {data_name}, loaded pred and label."
-                )
+                logger.info(f"{idx + 1}/{len(self.test_loader)}: {data_name}, loaded pred and label.")
                 pred = np.load(pred_save_path)
-                # 新增：从数据字典加载坐标（根据实际数据集键名调整）
-                if "coord" in data_dict:
-                    coords_all = data_dict["coord"].cpu().numpy()
-                    logger.debug(f"[{data_name}] 从data_dict['coord']加载坐标，前5个点: {coords_all[:5]}")
-                elif "points" in data_dict:  # 有些数据集可能用points存储坐标
-                    coords_all = data_dict["points"][:, :3].cpu().numpy()
-                    logger.debug(f"[{data_name}] 从data_dict['points']加载坐标，前5个点: {coords_all[:5]}")
-                else:
-                    # 新增：如果没有找到坐标键，明确输出日志
-                    logger.warning(f"[{data_name}] data_dict中未找到'coord'或'points'键，无法加载坐标")
+
+                # 关键修改：从fragment_list提取坐标（而非data_dict）
+                logger.info(f"[{data_name}] 尝试从fragment_list提取坐标...")
+                for fragment in fragment_list:
+                    if isinstance(fragment, dict) and "coord" in fragment and "index" in fragment:
+                        # 获取该片段的坐标和对应的全局索引
+                        fragment_coords = fragment["coord"].cpu().numpy()  # 片段内的坐标
+                        fragment_indices = fragment["index"].cpu().numpy()  # 这些坐标在全局点云中的索引
+
+                        # 将片段坐标放到全局坐标数组的对应位置
+                        coords_all[fragment_indices] = fragment_coords
+                        coords_extracted = True
+                        # 日志：打印第一个片段的前5个坐标，验证是否有效
+                        if fragment == fragment_list[0]:
+                            logger.info(f"[{data_name}] 第一个fragment的前5个坐标: {fragment_coords[:5]}")
+                    else:
+                        logger.warning(f"[{data_name}] fragment缺少'coord'或'index'键，跳过该片段")
+
+                if not coords_extracted:
+                    logger.error(f"[{data_name}] 无法从fragment_list提取任何坐标数据！")
 
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
