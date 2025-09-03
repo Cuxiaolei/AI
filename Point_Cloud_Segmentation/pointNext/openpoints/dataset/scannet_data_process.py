@@ -34,9 +34,9 @@ CATEGORY_TO_SEGMENT: Dict[str, int] = {
     "地面点": 1,
     "变电站": 1,
     "中等植被点": 1,
-    "交叉跨越下": 1,
     "不通航河流": 1,
     # 2 类（导线相关）
+    "交叉跨越下": 2,
     "导线": 2,
     "地线": 2,
     "引流线": 2,
@@ -190,6 +190,8 @@ def process_las_files_merge_scene(input_dir: str, output_dir: str, write_split: 
         n1 = int((seg == 1).sum())
         n2 = int((seg == 2).sum())
         print(f"[{scene_name}] total={len(seg)}, 0={n0}, 1={n1}, 2={n2}")
+        with open(output_path / "scene_mapping.txt", "a", encoding="utf-8") as f:
+            f.write(f"{scene_id} → {scene_name}\n")
 
     # 写 train/val 划分
     if write_split:
@@ -201,6 +203,8 @@ def process_las_files_merge_scene(input_dir: str, output_dir: str, write_split: 
         (output_path / "train.txt").write_text("\n".join(train_list), encoding="utf-8")
         (output_path / "val.txt").write_text("\n".join(val_list), encoding="utf-8")
         print(f"\n[完成] 共 {n_total} 个场景 → train: {len(train_list)} / val: {len(val_list)}")
+
+
 
 
 if __name__ == "__main__":
