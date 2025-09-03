@@ -213,7 +213,8 @@ class SemSegTester(TesterBase):
 
                 # 关键修改：从fragment_list提取坐标（而非data_dict）
                 logger.info(f"[{data_name}] 尝试从fragment_list提取坐标...")
-                for fragment in fragment_list:
+                # 用enumerate获取索引，通过索引判断是否为第一个片段（避免直接比较字典）
+                for i, fragment in enumerate(fragment_list):
                     if isinstance(fragment, dict) and "coord" in fragment and "index" in fragment:
                         # 获取该片段的坐标和对应的全局索引
                         fragment_coords = fragment["coord"].cpu().numpy()  # 片段内的坐标
@@ -222,8 +223,8 @@ class SemSegTester(TesterBase):
                         # 将片段坐标放到全局坐标数组的对应位置
                         coords_all[fragment_indices] = fragment_coords
                         coords_extracted = True
-                        # 日志：打印第一个片段的前5个坐标，验证是否有效
-                        if fragment == fragment_list[0]:
+                        # 日志：通过索引i判断是否为第一个片段，打印前5个坐标
+                        if i == 0:  # 此处修改：用索引判断，而非直接比较字典
                             logger.info(f"[{data_name}] 第一个fragment的前5个坐标: {fragment_coords[:5]}")
                     else:
                         logger.warning(f"[{data_name}] fragment缺少'coord'或'index'键，跳过该片段")
@@ -235,49 +236,41 @@ class SemSegTester(TesterBase):
                     segment = data_dict["origin_segment"]
 
 
-            else:
-                pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
-                # 新增：初始化GPU坐标存储
-                coords_gpu = torch.zeros((segment.size, 3), dtype=torch.float32).cuda()
 
+            else:
+                # 首次运行（未加载pred文件）时，也从fragment_list提取坐标
+                pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
+                coords_gpu = torch.zeros((segment.size, 3), dtype=torch.float32).cuda()
                 for i in range(len(fragment_list)):
                     fragment_batch_size = 1
-                    s_i, e_i = i * fragment_batch_size, min(
-                        (i + 1) * fragment_batch_size, len(fragment_list)
-                    )
+                    s_i, e_i = i * fragment_batch_size, min((i + 1) * fragment_batch_size, len(fragment_list))
                     input_dict = self.__class__.collate_fn(fragment_list[s_i:e_i])
                     for key in input_dict.keys():
                         if isinstance(input_dict[key], torch.Tensor):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
-
-                    # 新增：收集片段坐标
+                    # 从fragment提取坐标（与原有逻辑保持一致，但确保正确收集）
                     if "coord" in input_dict:
                         coords_part = input_dict["coord"]
                     elif "points" in input_dict:
                         coords_part = input_dict["points"][:, :3]
                     else:
-                        raise ValueError("Could not find coordinate data in input_dict")
-
+                        raise ValueError("Could not find coordinate data in fragment")
                     with torch.no_grad():
-                        pred_part = self.model(input_dict)["seg_logits"]  # (n, k)
+                        pred_part = self.model(input_dict)["seg_logits"]
                         pred_part = F.softmax(pred_part, -1)
                         if self.cfg.empty_cache:
                             torch.cuda.empty_cache()
                         bs = 0
                         for be in input_dict["offset"]:
                             pred[idx_part[bs:be], :] += pred_part[bs:be]
-                            # 新增：累加片段坐标
-                            coords_gpu[idx_part[bs:be]] = coords_part[bs:be]
+                            coords_gpu[idx_part[bs:be]] = coords_part[bs:be]  # 收集坐标
                             bs = be
-
-                    logger.info(
-                        f"Test: {idx + 1}/{len(self.test_loader)}-{data_name}, Batch: {i}/{len(fragment_list)}"
-                    )
-
-                # 新增：将GPU坐标转换为CPU并存储
+                    logger.info(f"Test: {idx + 1}/{len(self.test_loader)}-{data_name}, Batch: {i}/{len(fragment_list)}")
+                # 转换为CPU数组
                 coords_all = coords_gpu.cpu().numpy()
-
+                coords_extracted = True
+                # 后续处理（与原有逻辑一致）
                 if self.cfg.data.test.type == "ScanNetPPDataset":
                     pred = pred.topk(3, dim=1)[1].data.cpu().numpy()
                 else:
@@ -286,11 +279,15 @@ class SemSegTester(TesterBase):
                 if "origin_segment" in data_dict.keys():
                     assert "inverse" in data_dict.keys()
                     pred = pred[data_dict["inverse"]]
-                    # 新增：同步坐标的inverse转换
-                    coords_all = coords_all[data_dict["inverse"]]
+                    coords_all = coords_all[data_dict["inverse"]]  # 同步坐标转换
                     segment = data_dict["origin_segment"]
-
                 np.save(pred_save_path, pred)
+                # 验证坐标是否有效
+            if coords_extracted and np.max(coords_all) > 0:
+                logger.info(
+                    f"[{data_name}] 坐标提取成功，坐标范围 - X: [{np.min(coords_all[:, 0]):.2f}, {np.max(coords_all[:, 0]):.2f}], Y: [{np.min(coords_all[:, 1]):.2f}, {np.max(coords_all[:, 1]):.2f}], Z: [{np.min(coords_all[:, 2]):.2f}, {np.max(coords_all[:, 2]):.2f}]")
+            else:
+                logger.warning(f"[{data_name}] 坐标数据仍为全0或无效！")
 
             # 原有代码：生成提交文件
             if self.cfg.data.test.type in ["ScanNetDataset", "ScanNet200Dataset"]:
