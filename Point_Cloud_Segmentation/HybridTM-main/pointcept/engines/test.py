@@ -307,26 +307,81 @@ class SemSegTester(TesterBase):
                 )
 
             # 新增：生成LAS文件（仅主进程）
+            # 新增：生成LAS文件（仅主进程）
             if comm.is_main_process():
                 las_filename = os.path.join(las_save_path, f"{data_name}.las")
                 try:
-                    # 创建LAS文件头
+                    # 1. 验证坐标数据有效性
+                    if coords_all is None or len(coords_all) == 0:
+                        logger.warning(f"点云坐标数据为空，无法生成LAS文件: {data_name}")
+                        continue  # 跳过空数据
+
+                    # 记录点云数量
+                    point_count = len(coords_all)
+                    logger.info(f"准备生成LAS文件: {las_filename}，包含 {point_count} 个点")
+
+                    # 2. 计算坐标范围并记录
+                    min_x, max_x = np.min(coords_all[:, 0]), np.max(coords_all[:, 0])
+                    min_y, max_y = np.min(coords_all[:, 1]), np.max(coords_all[:, 1])
+                    min_z, max_z = np.min(coords_all[:, 2]), np.max(coords_all[:, 2])
+
+                    # 检查坐标是否有效（非NaN/Inf）
+                    if np.isnan([min_x, max_x, min_y, max_y, min_z, max_z]).any():
+                        logger.error(f"坐标数据包含无效值(NaN/Inf)，文件生成失败: {data_name}")
+                        continue
+
+                    # 记录坐标范围日志
+                    logger.info(
+                        f"点云坐标范围 - X: [{min_x:.2f}, {max_x:.2f}], Y: [{min_y:.2f}, {max_y:.2f}], Z: [{min_z:.2f}, {max_z:.2f}]")
+
+                    # 3. 验证分类数据有效性
+                    if pred is None or len(pred) != point_count:
+                        logger.error(
+                            f"分类数据与点云数量不匹配（点云: {point_count}, 分类: {len(pred) if pred is not None else 0}），文件生成失败: {data_name}")
+                        continue
+
+                    # 记录分类范围
+                    min_class = np.min(pred)
+                    max_class = np.max(pred)
+                    logger.info(f"分类标签范围: [{min_class}, {max_class}]，共 {len(np.unique(pred))} 种类别")
+
+                    # 4. 创建LAS文件并写入数据
                     header = laspy.LasHeader(point_format=3, version="1.2")
                     las = laspy.LasData(header)
 
-                    # 设置坐标（注意：LAS格式通常使用毫米为单位，根据需要调整）
                     las.x = coords_all[:, 0]
                     las.y = coords_all[:, 1]
                     las.z = coords_all[:, 2]
 
-                    # 设置分类信息（使用预测结果）
+                    # 设置边界框元数据
+                    header.min_x = min_x
+                    header.max_x = max_x
+                    header.min_y = min_y
+                    header.max_y = max_y
+                    header.min_z = min_z
+                    header.max_z = max_z
+
+                    # 设置分类信息
                     las.classification = pred.astype(np.uint8)
 
-                    # 保存文件
+                    # 5. 保存文件并验证文件大小
                     las.write(las_filename)
-                    logger.info(f"Saved LAS file to: {las_filename}")
+
+                    # 检查文件是否生成成功
+                    if os.path.exists(las_filename):
+                        file_size = os.path.getsize(las_filename) / 1024  # 转换为KB
+                        logger.info(f"LAS文件生成成功 - 大小: {file_size:.2f} KB，路径: {las_filename}")
+
+                        # 验证文件点数量是否匹配
+                        if len(las.points) == point_count:
+                            logger.debug(f"文件点数量验证通过（预期: {point_count}, 实际: {len(las.points)}）")
+                        else:
+                            logger.warning(f"文件点数量不匹配（预期: {point_count}, 实际: {len(las.points)}）")
+                    else:
+                        logger.error(f"LAS文件生成失败，文件不存在: {las_filename}")
+
                 except Exception as e:
-                    logger.error(f"Failed to save LAS file {las_filename}: {str(e)}")
+                    logger.error(f"生成LAS文件时发生错误: {str(e)}", exc_info=True)  # 记录详细异常堆栈
 
             # 原有代码：计算评估指标
             intersection, union, target = intersection_and_union(
