@@ -186,19 +186,19 @@ class SemSegTester(TesterBase):
             # 提取fragment_list并添加日志（此时data_name已定义）
             fragment_list = data_dict.pop("fragment_list")
             # 日志：fragment_list基本信息
-            logger.debug(f"[{data_name}] fragment_list 长度: {len(fragment_list)}")
+            logger.info(f"[{data_name}] fragment_list 长度: {len(fragment_list)}")
             if len(fragment_list) > 0:
                 # 日志：第一个元素的类型和关键键名
                 first_fragment = fragment_list[0]
-                logger.debug(f"[{data_name}] 第一个fragment类型: {type(first_fragment)}")
+                logger.info(f"[{data_name}] 第一个fragment类型: {type(first_fragment)}")
                 if isinstance(first_fragment, dict):
-                    logger.debug(f"[{data_name}] 第一个fragment包含键: {list(first_fragment.keys())}")
+                    logger.info(f"[{data_name}] 第一个fragment包含键: {list(first_fragment.keys())}")
                     # 检查是否有坐标相关的键
                     coord_keys = [k for k in first_fragment.keys() if k in ["coord", "points", "xyz"]]
-                    logger.debug(f"[{data_name}] fragment中可能的坐标键: {coord_keys}")
+                    logger.info(f"[{data_name}] fragment中可能的坐标键: {coord_keys}")
                 # 日志：最后一个元素的基本信息（避免过长）
                 last_fragment = fragment_list[-1]
-                logger.debug(f"[{data_name}] 最后一个fragment类型: {type(last_fragment)}")
+                logger.info(f"[{data_name}] 最后一个fragment类型: {type(last_fragment)}")
 
             # 提取segment（调整到data_name之后）
             segment = data_dict.pop("segment")
