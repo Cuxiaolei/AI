@@ -196,6 +196,7 @@ class SemSegTester(TesterBase):
                 # 新增：从数据字典加载坐标（根据实际数据集键名调整）
                 if "coord" in data_dict:
                     coords_all = data_dict["coord"].cpu().numpy()
+                    logger.debug(f"前5个点的坐标: {coords_all[:5]}")  # 查看是否全为[0,0,0]
                 elif "points" in data_dict:  # 有些数据集可能用points存储坐标
                     coords_all = data_dict["points"][:, :3].cpu().numpy()
 
