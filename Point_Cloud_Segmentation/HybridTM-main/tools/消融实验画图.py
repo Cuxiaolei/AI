@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 import os
 from datetime import datetime
 
@@ -46,8 +46,8 @@ def filter_experiment_models(all_models, target_models):
     return filtered
 
 
-def plot_experiment_curve(filtered_models, config, metric_type):
-    """绘制单个实验的曲线（支持mIoU或OA）"""
+def plot_experiment_curve(filtered_models, config, metric_type, is_zoom=False):
+    """绘制单个实验的曲线（支持mIoU或OA），增加is_zoom参数用于处理放大图"""
     # 初始化图表
     plt.figure(figsize=config['fig_size'])
     ax = plt.gca()
@@ -65,8 +65,18 @@ def plot_experiment_curve(filtered_models, config, metric_type):
         color = colors[idx]
         metric_data = metrics[metric_type] * 100  # 转为百分比
 
+        # 如果是放大图，只绘制70-100 epoch的数据
+        if is_zoom:
+            # 确保不超出实际数据范围
+            end_idx = min(100, len(epochs))
+            plot_epochs = epochs[69:end_idx]  # 70-100 epoch（索引69到99）
+            plot_data = metric_data[69:end_idx]
+        else:
+            plot_epochs = epochs
+            plot_data = metric_data
+
         plt.plot(
-            epochs, metric_data,
+            plot_epochs, plot_data,
             label=model_name,
             color=color,
             linestyle='-',
@@ -74,19 +84,50 @@ def plot_experiment_curve(filtered_models, config, metric_type):
             alpha=0.8
         )
 
-    # 图表基础配置（无标题，仅保留坐标轴标签）
+    # 图表基础配置
     plt.title('', fontsize=config['font']['title_size'])
     plt.xlabel(config['axis_labels']['x'], fontsize=config['font']['label_size'])
-    plt.ylabel(f"{metric_type.upper()} (%)", fontsize=config['font']['label_size'])
-    plt.xlim(config['axis_lim']['x'])
-    plt.ylim(config['axis_lim']['y'])
+    plt.ylabel(f"miou(%)", fontsize=config['font']['label_size'])
 
-    # 刻度与边框样式优化
-    ax.xaxis.set_major_locator(MultipleLocator(config['ticker']['x_major']))
-    ax.xaxis.set_minor_locator(MultipleLocator(config['ticker']['x_minor']))
-    ax.yaxis.set_major_locator(MultipleLocator(config['ticker']['y_major']))
-    ax.yaxis.set_minor_locator(MultipleLocator(config['ticker']['y_minor']))
+    # 设置坐标轴范围
+    if is_zoom:
+        # 放大图：x为70-100，y为85-100
+        plt.xlim(70, min(100, config['num_epochs']))
+        plt.ylim(94, 100)
 
+        # X轴刻度设置：整数刻度显示值，半刻度线不显示值
+        ax.xaxis.set_major_locator(MultipleLocator(5))  # x主刻度间隔5
+        ax.xaxis.set_minor_locator(MultipleLocator(2.5))  # x半刻度间隔2.5
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%d'))  # 主刻度显示整数
+        ax.xaxis.set_minor_formatter(plt.NullFormatter())  # 次刻度不显示值
+
+        # Y轴刻度设置：整数刻度显示值，半刻度线不显示值
+        ax.yaxis.set_major_locator(MultipleLocator(1))  # y主刻度间隔5
+        ax.yaxis.set_minor_locator(MultipleLocator(0.5))  # y半刻度间隔2.5
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%d'))  # 主刻度显示整数
+        ax.yaxis.set_minor_formatter(plt.NullFormatter())  # 次刻度不显示值
+    else:
+        # 原图使用配置的坐标轴范围
+        plt.xlim(config['axis_lim']['x'])
+        plt.ylim(config['axis_lim']['y'])
+
+        # X轴刻度设置：整数刻度显示值，半刻度线不显示值
+        ax.xaxis.set_major_locator(MultipleLocator(config['ticker']['x_major']))
+        ax.xaxis.set_minor_locator(MultipleLocator(config['ticker']['x_major'] / 2))  # 半刻度
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%d'))  # 主刻度显示整数
+        ax.xaxis.set_minor_formatter(plt.NullFormatter())  # 次刻度不显示值
+
+        # Y轴刻度设置：整数刻度显示值，半刻度线不显示值
+        ax.yaxis.set_major_locator(MultipleLocator(config['ticker']['y_major']))
+        ax.yaxis.set_minor_locator(MultipleLocator(config['ticker']['y_major'] / 2))  # 半刻度
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%d'))  # 主刻度显示整数
+        ax.yaxis.set_minor_formatter(plt.NullFormatter())  # 次刻度不显示值
+
+    # 设置刻度标签大小
+    ax.tick_params(axis='both', which='major', labelsize=config['font']['tick_size'])
+    ax.tick_params(axis='both', which='minor', labelsize=0)  # 次刻度无标签
+
+    # 边框样式优化
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_linewidth(1.2)
@@ -102,10 +143,11 @@ def plot_experiment_curve(filtered_models, config, metric_type):
         bbox_to_anchor=(0.98, 0.02)
     )
 
-    # 生成图片名称（去掉时间后缀，仅保留实验名+指标+CSV基名）
+    # 生成图片名称（放大图添加zoom标识）
     csv_basename = os.path.splitext(os.path.basename(config['csv_path']))[0]
-    file_name = f"{exp_name}_{metric_type}_{csv_basename}.png"  # 无时间戳
-    save_path = os.path.join(config['save_root'], file_name)  # save_root已包含时间文件夹
+    zoom_suffix = "_zoom" if is_zoom else ""
+    file_name = f"{exp_name}_{metric_type}_{csv_basename}{zoom_suffix}.png"
+    save_path = os.path.join(config['save_root'], file_name)
 
     # 保存图片
     plt.savefig(
@@ -115,7 +157,7 @@ def plot_experiment_curve(filtered_models, config, metric_type):
         pad_inches=0.3,
         pil_kwargs=dict(quality=95)
     )
-    print(f"✅ 实验{exp_name}的{metric_type.upper()}图已保存：{save_path}")
+    print(f"✅ 实验{exp_name}的{metric_type.upper()}{'放大' if is_zoom else ''}图已保存：{save_path}")
     plt.close()
 
 
@@ -125,7 +167,7 @@ def main():
     # ==============================
     cf = {
         # 1. 基础路径配置
-        'csv_path': "../z_xiaorong/1.csv",  # 8个模型（E1-E8）数据CSV路径
+        'csv_path': r"D:\桌面1\训练结果\scannet\消融\z_xiaorong\1.csv",  # 8个模型（E1-E8）数据CSV路径
         'base_save_root': "../z_xiaorong/消融实验结果",  # 基础保存根目录
         'save_dpi': 600,  # 图片分辨率
 
@@ -168,18 +210,15 @@ def main():
     }
 
     # ==============================
-    # 核心修改：创建时间命名的独立文件夹
+    # 创建时间命名的独立文件夹
     # ==============================
-    # 生成时间文件夹名称（格式：20240902_153045，避免重复）
     time_folder_name = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 完整保存路径 = 基础根目录 + 时间文件夹（每次运行新建）
     cf['save_root'] = os.path.join(cf['base_save_root'], time_folder_name)
-    # 创建文件夹（自动创建多级目录，如“消融实验结果/20240902_153045”）
     os.makedirs(cf['save_root'], exist_ok=True)
     print(f"📂 本次结果保存目录：{cf['save_root']}")
 
     # ==============================
-    # 执行消融实验（无需修改以下代码）
+    # 执行消融实验
     # ==============================
     # 1. 加载所有8个模型数据
     all_models, num_epochs = load_all_models_data(
@@ -187,25 +226,30 @@ def main():
         expected_total_models=8
     )
     # 补充X轴范围（自动适配实际训练轮次）
-    cf['axis_lim']['x'] = (cf['axis_lim']['x'][0], num_epochs)
+    default_x_lim = cf['axis_lim']['x']
+    cf['axis_lim']['x'] = (default_x_lim[0], num_epochs)
 
-    # 2. 循环生成每组实验的mIoU/OA图（共6张）
+    # 2. 循环生成每组实验的图表（原图+放大图）
     for exp_config in cf['experiments']:
         # 筛选当前实验的模型数据
         filtered_models = filter_experiment_models(
             all_models=all_models,
             target_models=exp_config['target_models']
         )
-        # 整合完整配置（全局配置 + 实验专属配置）
+        # 整合完整配置
         current_full_config = {
             **cf,
             **exp_config,
             'num_epochs': num_epochs
         }
-        # 生成mIoU图
-        plot_experiment_curve(filtered_models, current_full_config, 'miou')
-        # 生成OA图
-        plot_experiment_curve(filtered_models, current_full_config, 'oa')
+
+        # 为每个实验生成三种图：mIoU原图、OA原图、mIoU放大图
+        # 1. 生成mIoU原图
+        plot_experiment_curve(filtered_models, current_full_config, 'miou', is_zoom=False)
+        # 2. 生成OA原图
+        plot_experiment_curve(filtered_models, current_full_config, 'oa', is_zoom=False)
+        # 3. 生成mIoU放大图（70-100 epoch，85-100%）
+        plot_experiment_curve(filtered_models, current_full_config, 'miou', is_zoom=True)
 
     print("\n🎉 所有消融实验图表生成完成！")
 

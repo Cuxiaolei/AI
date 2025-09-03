@@ -212,7 +212,7 @@ def load_data_from_csv(file_path):
 
 
 def main():
-    csv_path = "../z_picture/train_metrics.csv"  # 替换为你的CSV路径
+    csv_path = r"D:\桌面1\训练结果\scannet\对比实验\train_metrics.csv"  # 替换为你的CSV路径
     models_data, num_epochs = load_data_from_csv(csv_path)
 
     # 绘制图表

@@ -84,5 +84,5 @@ def plot_sensitivity_analysis(csv_file_path):
 
 if __name__ == "__main__":
     # 填写你的CSV文件路径
-    csv_file = "../z_canshu/test_results.csv"
+    csv_file = r"D:\桌面1\训练结果\scannet\参数敏感性分析\z_canshu\test_results.csv"
     plot_sensitivity_analysis(csv_file)

@@ -168,7 +168,7 @@ def save_figure(fig, csv_path):
 def main():
     """主函数（保持原有逻辑，仅路径需确认）"""
     # 设置CSV文件路径（请确认路径正确性）
-    csv_path = "../z_hunxiao/minkunet.csv"
+    csv_path = r"D:\桌面1\训练结果\scannet\混淆矩阵\minkunet.csv"
 
     if not os.path.exists(csv_path):
         print(f"Error: CSV file not found - {csv_path}")
