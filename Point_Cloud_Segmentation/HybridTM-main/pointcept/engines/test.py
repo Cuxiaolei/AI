@@ -506,9 +506,28 @@ class SemSegTester(TesterBase):
                     f"{idx + 1}/{len(self.test_loader)}: {data_name}, loaded pred and label."
                 )
                 pred = np.load(pred_save_path)
+                # 修复：优先从data_dict获取坐标，支持多种可能的键名
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
-                    coords = origin_coords  # 使用原始坐标
+                    # 尝试多种可能的坐标键名（根据你的数据集实际情况调整）
+                    coords = data_dict.get("origin_coord", None)
+                    if coords is None:
+                        coords = data_dict.get("coord", None)  # 备选键1
+                    if coords is None:
+                        coords = data_dict.get("points", None)  # 备选键2
+                else:
+                    # 非origin场景，直接从data_dict取坐标
+                    coords = data_dict.get("coord", None)
+                    if coords is None:
+                        coords = data_dict.get("points", None)  # 备选键
+
+                # 新增日志：检查坐标是否获取成功
+                if coords is None:
+                    logger.warning(f"场景 {data_name} 未找到坐标数据，无法生成LAS文件")
+                else:
+                    # 确保坐标是numpy数组（如果是torch张量则转换）
+                    if isinstance(coords, torch.Tensor):
+                        coords = coords.cpu().numpy()
             else:
                 pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
                 # 初始化坐标张量
@@ -683,6 +702,9 @@ class SemSegTester(TesterBase):
                     logger.warning("未安装laspy库，无法生成LAS文件。请安装: pip install laspy")
                 except Exception as e:
                     logger.error(f"生成LAS文件失败: {str(e)}")
+            elif comm.is_main_process() and coords is None:
+                # 新增：明确提示坐标缺失
+                logger.warning(f"场景 {data_name} 因坐标缺失，未生成LAS文件")
 
         logger.info("Syncing ...")
         comm.synchronize()
