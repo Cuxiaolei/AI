@@ -115,323 +115,6 @@ class TesterBase:
         raise collate_fn(batch)
 
 
-# @TESTERS.register_module()
-# class SemSegTester(TesterBase):
-#     def test(self):
-#         assert self.test_loader.batch_size == 1
-#         logger = get_root_logger()
-#         logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>>>")
-#
-#         batch_time = AverageMeter()
-#         intersection_meter = AverageMeter()
-#         union_meter = AverageMeter()
-#         target_meter = AverageMeter()
-#         self.model.eval()
-#
-#         save_path = os.path.join(self.cfg.save_path, "result")
-#         make_dirs(save_path)
-#         # 创建提交文件夹（仅主进程）
-#         if (
-#                 self.cfg.data.test.type in ["ScanNetDataset", "ScanNet200Dataset", "ScanNetPPDataset"]
-#                 and comm.is_main_process()
-#         ):
-#             make_dirs(os.path.join(save_path, "submit"))
-#         elif self.cfg.data.test.type == "SemanticKITTIDataset" and comm.is_main_process():
-#             make_dirs(os.path.join(save_path, "submit"))
-#         elif self.cfg.data.test.type == "NuScenesDataset" and comm.is_main_process():
-#             import json
-#             make_dirs(os.path.join(save_path, "submit", "lidarseg", "test"))
-#             make_dirs(os.path.join(save_path, "submit", "test"))
-#             submission = dict(
-#                 meta=dict(
-#                     use_camera=False,
-#                     use_lidar=True,
-#                     use_radar=False,
-#                     use_map=False,
-#                     use_external=False,
-#                 )
-#             )
-#             with open(
-#                     os.path.join(save_path, "submit", "test", "submission.json"), "w"
-#             ) as f:
-#                 json.dump(submission, f, indent=4)
-#         comm.synchronize()
-#
-#         record = {}
-#         # 初始化混淆矩阵（num_classes x num_classes）
-#         num_classes = self.cfg.data.num_classes
-#         confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
-#
-#         # 碎片推理
-#         for idx, data_dict in enumerate(self.test_loader):
-#             end = time.time()
-#             # 处理批次数据
-#             if isinstance(data_dict, list):
-#                 data_dict = data_dict[0]
-#
-#             fragment_list = data_dict.pop("fragment_list")
-#             segment = data_dict.pop("segment")
-#             data_name = data_dict.pop("name")
-#             pred_save_path = os.path.join(save_path, "{}_pred.npy".format(data_name))
-#
-#             if os.path.isfile(pred_save_path):
-#                 logger.info(
-#                     f"{idx + 1}/{len(self.test_loader)}: {data_name}, loaded pred and label."
-#                 )
-#                 pred = np.load(pred_save_path)
-#                 if "origin_segment" in data_dict.keys():
-#                     segment = data_dict["origin_segment"]
-#             else:
-#                 pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
-#                 for i in range(len(fragment_list)):
-#                     fragment_batch_size = 1
-#                     s_i, e_i = i * fragment_batch_size, min(
-#                         (i + 1) * fragment_batch_size, len(fragment_list)
-#                     )
-#                     input_dict = self.__class__.collate_fn(fragment_list[s_i:e_i])
-#                     for key in input_dict.keys():
-#                         if isinstance(input_dict[key], torch.Tensor):
-#                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
-#                     idx_part = input_dict["index"]
-#                     with torch.no_grad():
-#                         pred_part = self.model(input_dict)["seg_logits"]  # (n, k)
-#                         pred_part = F.softmax(pred_part, -1)
-#                         if self.cfg.empty_cache:
-#                             torch.cuda.empty_cache()
-#                         bs = 0
-#                         for be in input_dict["offset"]:
-#                             pred[idx_part[bs:be], :] += pred_part[bs:be]
-#                             bs = be
-#
-#                     logger.info(
-#                         f"Test: {idx + 1}/{len(self.test_loader)}-{data_name}, Batch: {i}/{len(fragment_list)}"
-#                     )
-#                 if self.cfg.data.test.type == "ScanNetPPDataset":
-#                     pred = pred.topk(3, dim=1)[1].data.cpu().numpy()
-#                 else:
-#                     pred = pred.max(1)[1].data.cpu().numpy()
-#                 if "origin_segment" in data_dict.keys():
-#                     assert "inverse" in data_dict.keys()
-#                     pred = pred[data_dict["inverse"]]
-#                     segment = data_dict["origin_segment"]
-#                 np.save(pred_save_path, pred)
-#
-#             # 生成提交文件
-#             if self.cfg.data.test.type in ["ScanNetDataset", "ScanNet200Dataset"]:
-#                 np.savetxt(
-#                     os.path.join(save_path, "submit", f"{data_name}.txt"),
-#                     self.test_loader.dataset.class2id[pred].reshape([-1, 1]),
-#                     fmt="%d",
-#                 )
-#             elif self.cfg.data.test.type == "ScanNetPPDataset":
-#                 np.savetxt(
-#                     os.path.join(save_path, "submit", f"{data_name}.txt"),
-#                     pred.astype(np.int32),
-#                     delimiter=",",
-#                     fmt="%d",
-#                 )
-#                 pred = pred[:, 0]  # 用于mIoU计算
-#             elif self.cfg.data.test.type == "SemanticKITTIDataset":
-#                 sequence_name, frame_name = data_name.split("_")
-#                 os.makedirs(
-#                     os.path.join(
-#                         save_path, "submit", "sequences", sequence_name, "predictions"
-#                     ),
-#                     exist_ok=True,
-#                 )
-#                 submit = pred.astype(np.uint32)
-#                 submit = np.vectorize(
-#                     self.test_loader.dataset.learning_map_inv.__getitem__
-#                 )(submit).astype(np.uint32)
-#                 submit.tofile(
-#                     os.path.join(
-#                         save_path,
-#                         "submit",
-#                         "sequences",
-#                         sequence_name,
-#                         "predictions",
-#                         f"{frame_name}.label",
-#                     )
-#                 )
-#             elif self.cfg.data.test.type == "NuScenesDataset":
-#                 np.array(pred + 1).astype(np.uint8).tofile(
-#                     os.path.join(
-#                         save_path,
-#                         "submit",
-#                         "lidarseg",
-#                         "test",
-#                         f"{data_name}_lidarseg.bin",
-#                     )
-#                 )
-#
-#             # 计算评估指标
-#             intersection, union, target = intersection_and_union(
-#                 pred, segment, self.cfg.data.num_classes, self.cfg.data.ignore_index
-#             )
-#             intersection_meter.update(intersection)
-#             union_meter.update(union)
-#             target_meter.update(target)
-#             record[data_name] = dict(
-#                 intersection=intersection, union=union, target=target
-#             )
-#
-#             # 更新混淆矩阵（过滤掉忽略的标签）
-#             valid_mask = segment != self.cfg.data.ignore_index
-#             valid_pred = pred[valid_mask]
-#             valid_segment = segment[valid_mask]
-#
-#             # 高效计算混淆矩阵（使用bincount）
-#             indices = valid_segment * num_classes + valid_pred
-#             counts = np.bincount(indices, minlength=num_classes ** 2)
-#             confusion_matrix += counts.reshape(num_classes, num_classes)
-#
-#             mask = union != 0
-#             iou_class = intersection / (union + 1e-10)
-#             iou = np.mean(iou_class[mask]) if mask.any() else 0.0
-#             acc = sum(intersection) / (sum(target) + 1e-10)
-#
-#             m_iou = np.mean(intersection_meter.sum / (union_meter.sum + 1e-10))
-#             m_acc = np.mean(intersection_meter.sum / (target_meter.sum + 1e-10))
-#
-#             batch_time.update(time.time() - end)
-#             logger.info(
-#                 f"Test: {data_name} [{idx + 1}/{len(self.test_loader)}]-{segment.size} "
-#                 f"Batch {batch_time.val:.3f} ({batch_time.avg:.3f}) "
-#                 f"Accuracy {acc:.4f} ({m_acc:.4f}) "
-#                 f"mIoU {iou:.4f} ({m_iou:.4f})"
-#             )
-#
-#         logger.info("Syncing ...")
-#         comm.synchronize()
-#         record_sync = comm.gather(record, dst=0)
-#         # 收集所有进程的混淆矩阵
-#         confusion_matrix_list = comm.gather(confusion_matrix, dst=0)
-#
-#         if comm.is_main_process():
-#             # 合并所有进程的记录
-#             record = {}
-#             for _ in range(len(record_sync)):
-#                 r = record_sync.pop()
-#                 record.update(r)
-#                 del r
-#
-#             # 合并所有进程的混淆矩阵
-#             total_confusion = np.sum(confusion_matrix_list, axis=0)
-#             # 计算每类的预测占比（行归一化）
-#             confusion_norm = total_confusion / (total_confusion.sum(axis=1, keepdims=True) + 1e-10)
-#
-#             # 计算总体指标
-#             intersection = np.sum(
-#                 [meters["intersection"] for _, meters in record.items()], axis=0
-#             )
-#             union = np.sum([meters["union"] for _, meters in record.items()], axis=0)
-#             target = np.sum([meters["target"] for _, meters in record.items()], axis=0)
-#
-#             if self.cfg.data.test.type == "S3DISDataset":
-#                 torch.save(
-#                     dict(intersection=intersection, union=union, target=target),
-#                     os.path.join(save_path, f"{self.test_loader.dataset.split}.pth"),
-#                 )
-#
-#             # 计算各类指标
-#             iou_class = intersection / (union + 1e-10)
-#             accuracy_class = intersection / (target + 1e-10)
-#             mIoU = np.mean(iou_class)
-#             mAcc = np.mean(accuracy_class)
-#             allAcc = sum(intersection) / (sum(target) + 1e-10)
-#
-#             # 保存结果到CSV
-#             csv_path = os.path.join(save_path, "test_results.csv")
-#             num_classes = self.cfg.data.num_classes
-#             class_names = self.cfg.data.names  # 类别名称列表
-#
-#             # 确保类别名称存在
-#             if not hasattr(self.cfg.data, 'names') or len(class_names) != num_classes:
-#                 class_names = [f"Class_{i}" for i in range(num_classes)]
-#                 logger.warning("Class names not properly defined in config, using default names")
-#
-#             # 写入常规测试结果CSV（保持不变）
-#             with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
-#                 writer = csv.writer(f)
-#                 header = ["Scene_Name"]
-#                 for i in range(num_classes):
-#                     header.append(f"Class_{i}_IOU({class_names[i]})")
-#                 for i in range(num_classes):
-#                     header.append(f"Class_{i}_ACC({class_names[i]})")
-#                 header.extend(["Scene_mIoU", "Scene_OA"])
-#                 writer.writerow(header)
-#
-#                 for scene_name, metrics in record.items():
-#                     inter = metrics["intersection"]
-#                     union = metrics["union"]
-#                     target = metrics["target"]
-#                     scene_iou = inter / (union + 1e-10)
-#                     scene_acc = inter / (target + 1e-10)
-#                     valid_mask = union != 0
-#                     valid_iou = scene_iou[valid_mask]
-#                     scene_miou = np.mean(valid_iou) if valid_iou.size > 0 else 0.0
-#                     scene_oa = np.sum(inter) / (np.sum(target) + 1e-10)
-#                     row = [scene_name]
-#                     row.extend([f"{x:.4f}" for x in scene_iou])
-#                     row.extend([f"{x:.4f}" for x in scene_acc])
-#                     row.extend([f"{scene_miou:.4f}", f"{scene_oa:.4f}"])
-#                     writer.writerow(row)
-#
-#                 avg_row = ["Global_Average"]
-#                 avg_row.extend([f"{x:.4f}" for x in iou_class])
-#                 avg_row.extend([f"{x:.4f}" for x in accuracy_class])
-#                 avg_row.extend([f"{mIoU:.4f}", f"{allAcc:.4f}"])
-#                 writer.writerow(avg_row)
-#
-#             # 新增：保存混淆矩阵
-#             conf_matrix_path = os.path.join(save_path, "confusion_matrix.csv")
-#             with open(conf_matrix_path, mode='w', newline='', encoding='utf-8') as f:
-#                 writer = csv.writer(f)
-#                 # 表头：预测类别
-#                 header = ["Actual/Predicted"] + [f"Class_{i}({class_names[i]})" for i in range(num_classes)]
-#                 writer.writerow(header)
-#                 # 内容：实际类别对应的预测分布
-#                 for i in range(num_classes):
-#                     row = [f"Class_{i}({class_names[i]})"] + total_confusion[i].tolist()
-#                     writer.writerow(row)
-#
-#             # 新增：保存归一化混淆矩阵（每类预测占比）
-#             conf_norm_path = os.path.join(save_path, "confusion_matrix_normalized.csv")
-#             with open(conf_norm_path, mode='w', newline='', encoding='utf-8') as f:
-#                 writer = csv.writer(f)
-#                 header = ["Actual/Predicted"] + [f"Class_{i}({class_names[i]})" for i in range(num_classes)]
-#                 writer.writerow(header)
-#                 for i in range(num_classes):
-#                     row = [f"Class_{i}({class_names[i]})"] + [f"{x:.4f}" for x in confusion_norm[i]]
-#                     writer.writerow(row)
-#
-#             # 打印日志
-#             logger.info(f"Test results saved to CSV: {csv_path}")
-#             logger.info(f"Confusion matrix saved to: {conf_matrix_path}")
-#             logger.info(f"Normalized confusion matrix (proportion) saved to: {conf_norm_path}")
-#             logger.info(
-#                 "Val result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}".format(
-#                     mIoU, mAcc, allAcc
-#                 )
-#             )
-#             for i in range(num_classes):
-#                 logger.info(
-#                     f"Class_{i} - {class_names[i]} Result: iou/accuracy {iou_class[i]:.4f}/{accuracy_class[i]:.4f}"
-#                 )
-#             logger.info("<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<")
-#
-#     @staticmethod
-#     def collate_fn(batch):
-#         """
-#         针对性处理两种场景：
-#         1. 处理test_loader的批次数据：返回列表（单一场景的完整数据，包含fragment_list）
-#         2. 处理fragment_list的碎片数据：返回单个字典（供模型输入）
-#         """
-#         # 如果batch是碎片数据（每个元素是单个碎片的字典，且batch长度为1）
-#         if len(batch) == 1 and isinstance(batch[0], dict) and "fragment_list" not in batch[0]:
-#             return batch[0]  # 返回单个碎片字典，供模型输入
-#         else:
-#             return batch  # 场景批次数据保持列表结构
 @TESTERS.register_module()
 class SemSegTester(TesterBase):
     def test(self):
@@ -439,10 +122,12 @@ class SemSegTester(TesterBase):
         logger = get_root_logger()
         logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>>>")
 
-        # 新增：打印test_loader基本信息
-        logger.info(f"test_loader 批次大小: {self.test_loader.batch_size}")
-        logger.info(f"test_loader 总样本数: {len(self.test_loader.dataset)}")
-        logger.info(f"test_loader 迭代次数: {len(self.test_loader)}")
+        # 新增：确保laspy库可用
+        try:
+            import laspy
+        except ImportError:
+            logger.error("Please install laspy first: pip install laspy")
+            raise
 
         batch_time = AverageMeter()
         intersection_meter = AverageMeter()
@@ -451,14 +136,12 @@ class SemSegTester(TesterBase):
         self.model.eval()
 
         save_path = os.path.join(self.cfg.save_path, "result")
+        # 新增：创建las文件保存目录
+        las_save_path = os.path.join(save_path, "las")
+        make_dirs(las_save_path)
         make_dirs(save_path)
 
-        # 创建LAS文件保存目录
-        las_save_path = os.path.join(self.cfg.save_path, "las_results")
-        make_dirs(las_save_path)
-        logger.info(f"LAS文件将保存至: {las_save_path}")
-
-        # 创建提交文件夹（仅主进程）
+        # 原有代码：创建提交文件夹（仅主进程）
         if (
                 self.cfg.data.test.type in ["ScanNetDataset", "ScanNet200Dataset", "ScanNetPPDataset"]
                 and comm.is_main_process()
@@ -486,69 +169,42 @@ class SemSegTester(TesterBase):
         comm.synchronize()
 
         record = {}
-        # 初始化混淆矩阵（num_classes x num_classes）
         num_classes = self.cfg.data.num_classes
         confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
 
-        # 碎片推理
+        # 新增：用于存储点云坐标（根据不同数据集可能需要调整键名）
+        coords_all = None
+
         for idx, data_dict in enumerate(self.test_loader):
-            # --------------------------
-            # 核心：检查test_loader返回的data_dict结构
-            # --------------------------
-            logger.info(f"\n===== 第 {idx + 1}/{len(self.test_loader)} 个批次数据检查 =====")
-
-            # 1. 打印data_dict的类型（是否为列表或字典）
-            logger.info(f"data_dict 类型: {type(data_dict).__name__}")
-
             end = time.time()
-            # 处理批次数据
             if isinstance(data_dict, list):
-                logger.info(f"data_dict 是列表，长度: {len(data_dict)}")
                 data_dict = data_dict[0]
-
-            sample_keys = list(data_dict.keys())
-            logger.info(f"样本包含的键: {sample_keys}")
 
             fragment_list = data_dict.pop("fragment_list")
             segment = data_dict.pop("segment")
             data_name = data_dict.pop("name")
             pred_save_path = os.path.join(save_path, "{}_pred.npy".format(data_name))
 
-            # 存储点云坐标用于生成LAS文件
-            coords = None
-            origin_coords = data_dict.get("origin_coord", None)
+            # 新增：初始化坐标存储
+            coords_all = np.zeros((segment.size, 3), dtype=np.float32)
 
             if os.path.isfile(pred_save_path):
                 logger.info(
                     f"{idx + 1}/{len(self.test_loader)}: {data_name}, loaded pred and label."
                 )
                 pred = np.load(pred_save_path)
-                # 修复：优先从data_dict获取坐标，支持多种可能的键名
+                # 新增：从数据字典加载坐标（根据实际数据集键名调整）
+                if "coord" in data_dict:
+                    coords_all = data_dict["coord"].cpu().numpy()
+                elif "points" in data_dict:  # 有些数据集可能用points存储坐标
+                    coords_all = data_dict["points"][:, :3].cpu().numpy()
+
                 if "origin_segment" in data_dict.keys():
                     segment = data_dict["origin_segment"]
-                    # 尝试多种可能的坐标键名（根据你的数据集实际情况调整）
-                    coords = data_dict.get("origin_coord", None)
-                    if coords is None:
-                        coords = data_dict.get("coord", None)  # 备选键1
-                    if coords is None:
-                        coords = data_dict.get("points", None)  # 备选键2
-                else:
-                    # 非origin场景，直接从data_dict取坐标
-                    coords = data_dict.get("coord", None)
-                    if coords is None:
-                        coords = data_dict.get("points", None)  # 备选键
-
-                # 新增日志：检查坐标是否获取成功
-                if coords is None:
-                    logger.warning(f"场景 {data_name} 未找到坐标数据，无法生成LAS文件")
-                else:
-                    # 确保坐标是numpy数组（如果是torch张量则转换）
-                    if isinstance(coords, torch.Tensor):
-                        coords = coords.cpu().numpy()
             else:
                 pred = torch.zeros((segment.size, self.cfg.data.num_classes)).cuda()
-                # 初始化坐标张量
-                coords = torch.zeros((segment.size, 3)).cuda()
+                # 新增：初始化GPU坐标存储
+                coords_gpu = torch.zeros((segment.size, 3), dtype=torch.float32).cuda()
 
                 for i in range(len(fragment_list)):
                     fragment_batch_size = 1
@@ -561,12 +217,13 @@ class SemSegTester(TesterBase):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
 
-                    # 收集坐标信息
+                    # 新增：收集片段坐标
                     if "coord" in input_dict:
-                        bs = 0
-                        for be in input_dict["offset"]:
-                            coords[idx_part[bs:be]] = input_dict["coord"][bs:be]
-                            bs = be
+                        coords_part = input_dict["coord"]
+                    elif "points" in input_dict:
+                        coords_part = input_dict["points"][:, :3]
+                    else:
+                        raise ValueError("Could not find coordinate data in input_dict")
 
                     with torch.no_grad():
                         pred_part = self.model(input_dict)["seg_logits"]  # (n, k)
@@ -576,27 +233,32 @@ class SemSegTester(TesterBase):
                         bs = 0
                         for be in input_dict["offset"]:
                             pred[idx_part[bs:be], :] += pred_part[bs:be]
+                            # 新增：累加片段坐标
+                            coords_gpu[idx_part[bs:be]] = coords_part[bs:be]
                             bs = be
 
                     logger.info(
                         f"Test: {idx + 1}/{len(self.test_loader)}-{data_name}, Batch: {i}/{len(fragment_list)}"
                     )
+
+                # 新增：将GPU坐标转换为CPU并存储
+                coords_all = coords_gpu.cpu().numpy()
+
                 if self.cfg.data.test.type == "ScanNetPPDataset":
                     pred = pred.topk(3, dim=1)[1].data.cpu().numpy()
                 else:
                     pred = pred.max(1)[1].data.cpu().numpy()
 
-                # 转换坐标为numpy数组
-                coords = coords.cpu().numpy()
-
                 if "origin_segment" in data_dict.keys():
                     assert "inverse" in data_dict.keys()
                     pred = pred[data_dict["inverse"]]
-                    coords = coords[data_dict["inverse"]]  # 同步处理坐标
+                    # 新增：同步坐标的inverse转换
+                    coords_all = coords_all[data_dict["inverse"]]
                     segment = data_dict["origin_segment"]
+
                 np.save(pred_save_path, pred)
 
-            # 生成提交文件
+            # 原有代码：生成提交文件
             if self.cfg.data.test.type in ["ScanNetDataset", "ScanNet200Dataset"]:
                 np.savetxt(
                     os.path.join(save_path, "submit", f"{data_name}.txt"),
@@ -644,7 +306,29 @@ class SemSegTester(TesterBase):
                     )
                 )
 
-            # 计算评估指标
+            # 新增：生成LAS文件（仅主进程）
+            if comm.is_main_process():
+                las_filename = os.path.join(las_save_path, f"{data_name}.las")
+                try:
+                    # 创建LAS文件头
+                    header = laspy.LasHeader(point_format=3, version="1.2")
+                    las = laspy.LasData(header)
+
+                    # 设置坐标（注意：LAS格式通常使用毫米为单位，根据需要调整）
+                    las.x = coords_all[:, 0]
+                    las.y = coords_all[:, 1]
+                    las.z = coords_all[:, 2]
+
+                    # 设置分类信息（使用预测结果）
+                    las.classification = pred.astype(np.uint8)
+
+                    # 保存文件
+                    las.write(las_filename)
+                    logger.info(f"Saved LAS file to: {las_filename}")
+                except Exception as e:
+                    logger.error(f"Failed to save LAS file {las_filename}: {str(e)}")
+
+            # 原有代码：计算评估指标
             intersection, union, target = intersection_and_union(
                 pred, segment, self.cfg.data.num_classes, self.cfg.data.ignore_index
             )
@@ -655,25 +339,23 @@ class SemSegTester(TesterBase):
                 intersection=intersection, union=union, target=target
             )
 
-            # 更新混淆矩阵（过滤掉忽略的标签）
+            # 原有代码：更新混淆矩阵
             valid_mask = segment != self.cfg.data.ignore_index
             valid_pred = pred[valid_mask]
             valid_segment = segment[valid_mask]
-
-            # 高效计算混淆矩阵（使用bincount）
             indices = valid_segment * num_classes + valid_pred
             counts = np.bincount(indices, minlength=num_classes ** 2)
             confusion_matrix += counts.reshape(num_classes, num_classes)
 
+            # 原有代码：计算并打印指标
             mask = union != 0
             iou_class = intersection / (union + 1e-10)
             iou = np.mean(iou_class[mask]) if mask.any() else 0.0
             acc = sum(intersection) / (sum(target) + 1e-10)
-
             m_iou = np.mean(intersection_meter.sum / (union_meter.sum + 1e-10))
             m_acc = np.mean(intersection_meter.sum / (target_meter.sum + 1e-10))
-
             batch_time.update(time.time() - end)
+
             logger.info(
                 f"Test: {data_name} [{idx + 1}/{len(self.test_loader)}]-{segment.size} "
                 f"Batch {batch_time.val:.3f} ({batch_time.avg:.3f}) "
@@ -681,68 +363,22 @@ class SemSegTester(TesterBase):
                 f"mIoU {iou:.4f} ({m_iou:.4f})"
             )
 
-            # -------------------
-            # 新增：保存LAS文件
-            # -------------------
-            if comm.is_main_process() and coords is not None:
-                try:
-                    import laspy
-                    from laspy.enums import PointFormat
-
-                    # 过滤无效点
-                    valid_mask = segment != self.cfg.data.ignore_index
-                    valid_coords = coords[valid_mask]
-                    valid_pred = pred[valid_mask]
-
-                    # 确保标签在LAS文件支持的范围内(0-255)
-                    if np.max(valid_pred) > 255:
-                        logger.warning(f"场景 {data_name} 的预测标签超过255，将缩放到0-255范围")
-                        valid_pred = (valid_pred / np.max(valid_pred) * 255).astype(np.uint8)
-                    else:
-                        valid_pred = valid_pred.astype(np.uint8)
-
-                    # 创建LAS文件
-                    header = laspy.LASHeader(point_format=PointFormat(3), version="1.2")
-                    header.offsets = np.min(valid_coords, axis=0)
-                    header.scales = [0.001, 0.001, 0.001]  # 毫米级精度
-
-                    las_file = laspy.LASFile(os.path.join(las_save_path, f"{data_name}_pred.las"), mode="w",
-                                             header=header)
-                    las_file.x = valid_coords[:, 0]
-                    las_file.y = valid_coords[:, 1]
-                    las_file.z = valid_coords[:, 2]
-                    las_file.classification = valid_pred
-                    las_file.close()
-
-                    logger.info(f"LAS文件已保存: {os.path.join(las_save_path, f'{data_name}_pred.las')}")
-                except ImportError:
-                    logger.warning("未安装laspy库，无法生成LAS文件。请安装: pip install laspy")
-                except Exception as e:
-                    logger.error(f"生成LAS文件失败: {str(e)}")
-            elif comm.is_main_process() and coords is None:
-                # 新增：明确提示坐标缺失
-                logger.warning(f"场景 {data_name} 因坐标缺失，未生成LAS文件")
-
+        # 以下为原有代码，保持不变
         logger.info("Syncing ...")
         comm.synchronize()
         record_sync = comm.gather(record, dst=0)
-        # 收集所有进程的混淆矩阵
         confusion_matrix_list = comm.gather(confusion_matrix, dst=0)
 
         if comm.is_main_process():
-            # 合并所有进程的记录
             record = {}
             for _ in range(len(record_sync)):
                 r = record_sync.pop()
                 record.update(r)
                 del r
 
-            # 合并所有进程的混淆矩阵
             total_confusion = np.sum(confusion_matrix_list, axis=0)
-            # 计算每类的预测占比（行归一化）
             confusion_norm = total_confusion / (total_confusion.sum(axis=1, keepdims=True) + 1e-10)
 
-            # 计算总体指标
             intersection = np.sum(
                 [meters["intersection"] for _, meters in record.items()], axis=0
             )
@@ -755,24 +391,20 @@ class SemSegTester(TesterBase):
                     os.path.join(save_path, f"{self.test_loader.dataset.split}.pth"),
                 )
 
-            # 计算各类指标
             iou_class = intersection / (union + 1e-10)
             accuracy_class = intersection / (target + 1e-10)
             mIoU = np.mean(iou_class)
             mAcc = np.mean(accuracy_class)
             allAcc = sum(intersection) / (sum(target) + 1e-10)
 
-            # 保存结果到CSV
             csv_path = os.path.join(save_path, "test_results.csv")
             num_classes = self.cfg.data.num_classes
-            class_names = self.cfg.data.names  # 类别名称列表
-
-            # 确保类别名称存在
-            if not hasattr(self.cfg.data, 'names') or len(class_names) != num_classes:
+            class_names = self.cfg.data.names if hasattr(self.cfg.data, 'names') else [f"Class_{i}" for i in
+                                                                                       range(num_classes)]
+            if len(class_names) != num_classes:
                 class_names = [f"Class_{i}" for i in range(num_classes)]
                 logger.warning("Class names not properly defined in config, using default names")
 
-            # 写入常规测试结果CSV
             with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 header = ["Scene_Name"]
@@ -805,19 +437,15 @@ class SemSegTester(TesterBase):
                 avg_row.extend([f"{mIoU:.4f}", f"{allAcc:.4f}"])
                 writer.writerow(avg_row)
 
-            # 保存混淆矩阵
             conf_matrix_path = os.path.join(save_path, "confusion_matrix.csv")
             with open(conf_matrix_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                # 表头：预测类别
                 header = ["Actual/Predicted"] + [f"Class_{i}({class_names[i]})" for i in range(num_classes)]
                 writer.writerow(header)
-                # 内容：实际类别对应的预测分布
                 for i in range(num_classes):
                     row = [f"Class_{i}({class_names[i]})"] + total_confusion[i].tolist()
                     writer.writerow(row)
 
-            # 保存归一化混淆矩阵（每类预测占比）
             conf_norm_path = os.path.join(save_path, "confusion_matrix_normalized.csv")
             with open(conf_norm_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
@@ -827,7 +455,6 @@ class SemSegTester(TesterBase):
                     row = [f"Class_{i}({class_names[i]})"] + [f"{x:.4f}" for x in confusion_norm[i]]
                     writer.writerow(row)
 
-            # 打印日志
             logger.info(f"Test results saved to CSV: {csv_path}")
             logger.info(f"Confusion matrix saved to: {conf_matrix_path}")
             logger.info(f"Normalized confusion matrix (proportion) saved to: {conf_norm_path}")
@@ -844,16 +471,11 @@ class SemSegTester(TesterBase):
 
     @staticmethod
     def collate_fn(batch):
-        """
-        针对性处理两种场景：
-        1. 处理test_loader的批次数据：返回列表（单一场景的完整数据，包含fragment_list）
-        2. 处理fragment_list的碎片数据：返回单个字典（供模型输入）
-        """
-        # 如果batch是碎片数据（每个元素是单个碎片的字典，且batch长度为1）
         if len(batch) == 1 and isinstance(batch[0], dict) and "fragment_list" not in batch[0]:
-            return batch[0]  # 返回单个碎片字典，供模型输入
+            return batch[0]
         else:
-            return batch  # 场景批次数据保持列表结构
+            return batch
+
 
 @TESTERS.register_module()
 class ClsTester(TesterBase):
