@@ -439,6 +439,11 @@ class SemSegTester(TesterBase):
         logger = get_root_logger()
         logger.info(">>>>>>>>>>>>>>>> Start Evaluation >>>>>>>>>>>>>>>>")
 
+        # 新增：打印test_loader基本信息
+        logger.info(f"test_loader 批次大小: {self.test_loader.batch_size}")
+        logger.info(f"test_loader 总样本数: {len(self.test_loader.dataset)}")
+        logger.info(f"test_loader 迭代次数: {len(self.test_loader)}")
+
         batch_time = AverageMeter()
         intersection_meter = AverageMeter()
         union_meter = AverageMeter()
@@ -487,10 +492,22 @@ class SemSegTester(TesterBase):
 
         # 碎片推理
         for idx, data_dict in enumerate(self.test_loader):
+            # --------------------------
+            # 核心：检查test_loader返回的data_dict结构
+            # --------------------------
+            logger.info(f"\n===== 第 {idx + 1}/{len(self.test_loader)} 个批次数据检查 =====")
+
+            # 1. 打印data_dict的类型（是否为列表或字典）
+            logger.info(f"data_dict 类型: {type(data_dict).__name__}")
+
             end = time.time()
             # 处理批次数据
             if isinstance(data_dict, list):
+                logger.info(f"data_dict 是列表，长度: {len(data_dict)}")
                 data_dict = data_dict[0]
+
+            sample_keys = list(data_dict.keys())
+            logger.info(f"样本包含的键: {sample_keys}")
 
             fragment_list = data_dict.pop("fragment_list")
             segment = data_dict.pop("segment")
