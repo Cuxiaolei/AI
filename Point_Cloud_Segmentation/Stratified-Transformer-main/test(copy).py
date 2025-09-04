@@ -43,11 +43,10 @@ def get_logger():
     logger_name = "main-logger"
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
-    # 控制台输出 handler
-    console_handler = logging.StreamHandler()
+    handler = logging.StreamHandler()
     fmt = "[%(asctime)s %(levelname)s %(filename)s line %(lineno)d %(process)d] %(message)s"
-    console_handler.setFormatter(logging.Formatter(fmt))
-    logger.addHandler(console_handler)
+    handler.setFormatter(logging.Formatter(fmt))
+    logger.addHandler(handler)
     return logger
 
 
@@ -175,7 +174,7 @@ def main():
     model = model.cuda()
     logger.info(model)
     criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label).cuda()
-    names = ['铁塔', '背景', '导线']  # 类别名称，需与数据集中的标签对应
+    names = ['铁塔', '背景', '导线']
 
     # 加载模型权重
     if os.path.isfile(args.model_path):
@@ -224,33 +223,17 @@ def test(model, criterion, names, test_transform):
     union_meter = AverageMeter()
     target_meter = AverageMeter()
 
-    # 初始化混淆矩阵 (classes x classes)
+    # 初始化混淆矩阵 (3x3)
     confusion_matrix = np.zeros((args.classes, args.classes), dtype=np.int64)
 
     model.eval()
-    check_makedirs(args.save_folder)  # 创建结果保存文件夹
-
-    # -------------------------- 新增1：保存测试日志到文件 --------------------------
-    log_file_path = os.path.join(args.save_folder, f'test_log_epoch{args.epoch}.txt')
-    file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
-    fmt = "[%(asctime)s %(levelname)s %(filename)s line %(lineno)d %(process)d] %(message)s"
-    file_handler.setFormatter(logging.Formatter(fmt))
-    logger.addHandler(file_handler)  # 同时输出到控制台和文件
-    logger.info(f"测试日志已保存至: {log_file_path}")
-
-    # -------------------------- 新增2：初始化测试结果列表（用于CSV） --------------------------
-    test_results = []  # 存储每个样本的详细指标
-    # 动态生成CSV表头（样本名 + 每类IoU/Acc + 样本mIoU + 样本OA）
-    result_headers = ['样本名称']
-    for cls_name in names:
-        result_headers.extend([f'{cls_name} IoU', f'{cls_name} Acc'])
-    result_headers.extend(['样本mIoU', '样本OA'])
-
+    check_makedirs(args.save_folder)
     pred_save, label_save = [], []
+
     dataset = create_test_dataset(test_transform)
     sample_names = get_sample_names(dataset)
     total_samples = len(dataset)
-    logger.info(f"测试集共 {total_samples} 个样本")
+    logger.info(f"Totally {total_samples} samples in test set.")
 
     for sample_idx in range(total_samples):
         item = sample_names[sample_idx]
@@ -259,55 +242,57 @@ def test(model, criterion, names, test_transform):
         label_save_path = os.path.join(args.save_folder, f'{item}_epoch{args.epoch}_label.npy')
 
         if os.path.exists(pred_save_path) and os.path.exists(label_save_path):
-            logger.info(f'{sample_idx + 1}/{total_samples}: {item} - 加载已存在的预测结果')
+            logger.info(f'{sample_idx + 1}/{total_samples}: {item} - loading existing results')
             pred = np.load(pred_save_path)
             label = np.load(label_save_path)
-            label = torch.from_numpy(label).long()  # 转为Tensor格式（与原代码一致）
         else:
-            logger.info(f'{sample_idx + 1}/{total_samples}: {item} - 开始处理')
+            logger.info(f'{sample_idx + 1}/{total_samples}: {item} - starting processing')
 
             # 加载数据
-            logger.info(f"[Step 1/5] 加载 {item} 的数据")
+            logger.info(f"[Step 1/5] Loading data for {item}")
             coord, feat, label = dataset[sample_idx]
             label = label.long()
-            logger.info(f"[数据信息] 坐标 shape: {coord.shape}, 特征 shape: {feat.shape}, 标签 shape: {label.shape}")
-            log_memory_usage(f"加载 {item} 数据后")
+            logger.info(f"[Data Info] coord shape: {coord.shape}, feat shape: {feat.shape}, label shape: {label.shape}")
+            log_memory_usage(f"After loading data for {item}")
 
-            # 点云分块处理
-            logger.info(f"[Step 2/5] 对 {item} 进行点云分块")
+            # 点云分块处理（使用改进的网格分块算法）
+            logger.info(f"[Step 2/5] Starting point cloud chunking for {item}")
             idx_data = []
             if args.voxel_max and coord.shape[0] > args.voxel_max:
-                logger.info(f"点数 ({coord.shape[0]}) 超过 voxel_max ({args.voxel_max})，启动网格分块")
+                logger.info(
+                    f"Point count ({coord.shape[0]}) exceeds voxel_max ({args.voxel_max}), starting grid-based chunking")
+                # 转换为numpy进行分块
                 coord_np = coord.numpy()
+                # 使用新的网格分块算法
                 idx_data = grid_based_chunking(coord_np, args.voxel_max)
 
-                # 验证分块覆盖度
+                # 验证分块覆盖所有点
                 all_indices = np.concatenate(idx_data)
                 unique_indices = np.unique(all_indices)
                 coverage = len(unique_indices) / coord.shape[0] * 100
-                logger.info(f"分块覆盖度: {coverage:.2f}% ({len(unique_indices)}/{coord.shape[0]} 个点)")
+                logger.info(f"Chunk coverage: {coverage:.2f}% ({len(unique_indices)}/{coord.shape[0]} points)")
                 if coverage < 99.9:
-                    logger.warning(f"覆盖度不足！部分点可能未被处理")
+                    logger.warning(f"Low coverage! Some points may not be processed")
             else:
                 idx_data.append(np.arange(coord.shape[0]))
-                logger.info(f"无需分块 (voxel_max: {args.voxel_max}, 点数: {coord.shape[0]})")
-            log_memory_usage(f"{item} 分块后")
+                logger.info(f"No chunking needed (voxel_max: {args.voxel_max}, point count: {coord.shape[0]})")
+            log_memory_usage(f"After chunking for {item}")
 
             # 模型推理
-            logger.info(f"[Step 3/5] 对 {item} 进行模型推理")
+            logger.info(f"[Step 3/5] Starting model inference for {item}")
             pred = np.zeros((label.shape[0], args.classes), dtype=np.float32)
             for chunk_id, idx_part in enumerate(idx_data):
-                logger.info(f"处理分块 {chunk_id + 1}/{len(idx_data)}，分块大小: {len(idx_part)}")
+                logger.info(f"Processing chunk {chunk_id + 1}/{len(idx_data)}, chunk size: {len(idx_part)}")
 
                 # 准备分块数据
                 coord_part = coord[idx_part].cuda(non_blocking=True)
                 feat_part = feat[idx_part].cuda(non_blocking=True)
                 offset_part = torch.tensor([len(coord_part)], dtype=torch.int32).cuda(non_blocking=True)
                 batch = torch.zeros(len(coord_part), dtype=torch.long).cuda(non_blocking=True)
-                log_memory_usage(f"[分块 {chunk_id + 1}] 数据移至GPU后")
+                log_memory_usage(f"[Chunk {chunk_id + 1}] After moving data to GPU")
 
-                # 计算邻域（球查询）
-                logger.info(f"[分块 {chunk_id + 1}] 执行球查询")
+                # 计算邻域
+                logger.info(f"[Chunk {chunk_id + 1}] Starting ball query")
                 radius = 2.5 * args.grid_size * 1.0
                 start_ball = time.time()
                 neighbor_idx = tp.ball_query(
@@ -317,151 +302,115 @@ def test(model, criterion, names, test_transform):
                     batch_x=batch, batch_y=batch
                 )[0].cuda(non_blocking=True)
                 end_ball = time.time()
-                logger.info(f"[分块 {chunk_id + 1}] 球查询耗时 {end_ball - start_ball:.2f}s，邻域索引 shape: {neighbor_idx.shape}")
-                log_memory_usage(f"[分块 {chunk_id + 1}] 球查询后")
+                logger.info(
+                    f"[Chunk {chunk_id + 1}] Ball query finished in {end_ball - start_ball:.2f}s, neighbor_idx shape: {neighbor_idx.shape}")
+                log_memory_usage(f"[Chunk {chunk_id + 1}] After ball query")
 
-                # 拼接坐标特征（若需要）
+                # 拼接坐标特征
                 if args.concat_xyz:
-                    logger.info(f"[分块 {chunk_id + 1}] 将坐标拼接到特征中")
+                    logger.info(f"[Chunk {chunk_id + 1}] Concatenating xyz to features")
                     feat_part = torch.cat([feat_part, coord_part], dim=1)
-                    logger.info(f"[分块 {chunk_id + 1}] 拼接后特征 shape: {feat_part.shape}")
+                    logger.info(f"[Chunk {chunk_id + 1}] New feature shape: {feat_part.shape}")
 
                 # 模型预测
-                logger.info(f"[分块 {chunk_id + 1}] 执行模型前向传播")
+                logger.info(f"[Chunk {chunk_id + 1}] Starting model forward pass")
                 start_model = time.time()
                 with torch.no_grad():
                     pred_part = model(feat_part, coord_part, offset_part, batch, neighbor_idx)
                     pred_part = F.softmax(pred_part, dim=-1).cpu().numpy()
                 end_model = time.time()
-                logger.info(f"[分块 {chunk_id + 1}] 前向传播耗时 {end_model - start_model:.2f}s")
+                logger.info(f"[Chunk {chunk_id + 1}] Model forward finished in {end_model - start_model:.2f}s")
 
                 # 累加预测结果
                 pred[idx_part] += pred_part
-                torch.cuda.empty_cache()  # 清空GPU缓存
-                log_memory_usage(f"[分块 {chunk_id + 1}] 推理后清空缓存")
+                torch.cuda.empty_cache()
+                log_memory_usage(f"[Chunk {chunk_id + 1}] After forward and cache clear")
 
-            # 处理最终预测结果
-            logger.info(f"[Step 4/5] 处理 {item} 的最终预测结果")
-            pred = pred.argmax(1)  # 取概率最大的类别作为预测结果
-            logger.info(f"[Step 5/5] 保存 {item} 的预测结果")
+            # 处理最终预测
+            logger.info(f"[Step 4/5] Processing final prediction for {item}")
+            pred = pred.argmax(1)
+            logger.info(f"[Step 5/5] Saving results for {item}")
             np.save(pred_save_path, pred)
             np.save(label_save_path, label.numpy())
-            log_memory_usage(f"保存 {item} 结果后")
+            log_memory_usage(f"After saving results for {item}")
 
-        # -------------------------- 核心修改：计算当前样本的详细指标 --------------------------
-        logger.info(f"[指标计算] 计算 {item} 的详细评估指标")
-        # 计算当前样本的交并比、目标点数（忽略指定标签）
+        # 计算评估指标
+        logger.info(f"Calculating metrics for {item}")
         intersection, union, target = intersectionAndUnion(
             pred, label.numpy(), args.classes, args.ignore_label
         )
-        # 1. 每类IoU和每类Acc（当前样本）
-        sample_cls_iou = intersection / (union + 1e-10)  # 避免除零
-        sample_cls_acc = intersection / (target + 1e-10)
-        # 2. 样本级mIoU（每类IoU的均值）和样本级OA（总体准确率）
-        sample_miou = np.mean(sample_cls_iou)
-        sample_oa = sum(intersection) / (sum(target) + 1e-10)
-
-        # 将当前样本指标添加到结果列表（保留4位小数）
-        sample_result = [item]  # 样本名称
-        for i in range(args.classes):
-            sample_result.append(round(sample_cls_iou[i], 4))
-            sample_result.append(round(sample_cls_acc[i], 4))
-        sample_result.append(round(sample_miou, 4))
-        sample_result.append(round(sample_oa, 4))
-        test_results.append(sample_result)
-
-        # 日志输出当前样本的详细指标
-        logger.info(f"[{item}] 样本级指标:")
-        for i, cls_name in enumerate(names):
-            logger.info(f"  {cls_name}: IoU={sample_cls_iou[i]:.4f}, Acc={sample_cls_acc[i]:.4f}")
-        logger.info(f"  样本mIoU: {sample_miou:.4f}, 样本OA: {sample_oa:.4f}")
-
-        # 更新全局指标计数器
         intersection_meter.update(intersection)
         union_meter.update(union)
         target_meter.update(target)
 
-        # 更新混淆矩阵（仅统计有效标签）
+        # 更新混淆矩阵（过滤掉忽略的标签）
         label_np = label.numpy()
-        mask = (label_np != args.ignore_label)  # 过滤忽略标签
+        mask = (label_np != args.ignore_label)
         valid_pred = pred[mask]
         valid_label = label_np[mask]
-        for true_cls, pred_cls in zip(valid_label, valid_pred):
-            confusion_matrix[true_cls, pred_cls] += 1
 
-        # 更新批次时间
+        for true_label, pred_label in zip(valid_label, valid_pred):
+            confusion_matrix[true_label, pred_label] += 1
+
+        accuracy = sum(intersection) / (sum(target) + 1e-10)
         batch_time.update(time.time() - end)
         logger.info(
-            f"[进度] Test: [{sample_idx + 1}/{total_samples}] {item} (点数: {label.size(0)}) "
-            f"耗时: {batch_time.val:.3f}s (平均: {batch_time.avg:.3f}s) "
-            f"当前样本OA: {sample_oa:.4f}"
+            f'Test: [{sample_idx + 1}/{total_samples}] {item} ({label.size(0)} points) '
+            f'Time {batch_time.val:.3f}s (avg: {batch_time.avg:.3f}s) '
+            f'Accuracy {accuracy:.4f}'
         )
 
         pred_save.append(pred)
         label_save.append(label.numpy())
 
-    # -------------------------- 最终汇总：计算总体指标并保存到CSV --------------------------
-    # 1. 计算总体指标（所有样本汇总）
-    total_cls_iou = intersection_meter.sum / (union_meter.sum + 1e-10)  # 总体每类IoU
-    total_cls_acc = intersection_meter.sum / (target_meter.sum + 1e-10)  # 总体每类Acc
-    total_miou = np.mean(total_cls_iou)  # 总体mIoU
-    total_oa = sum(intersection_meter.sum) / (sum(target_meter.sum) + 1e-10)  # 总体OA
-
-    # 2. 构建总体汇总行（与样本行格式一致）
-    total_result = ['总体汇总']
-    for i in range(args.classes):
-        total_result.append(round(total_cls_iou[i], 4))
-        total_result.append(round(total_cls_acc[i], 4))
-    total_result.append(round(total_miou, 4))
-    total_result.append(round(total_oa, 4))
-    test_results.append(total_result)  # 将总体结果添加到列表末尾
-
-    # 3. 保存详细结果到CSV
-    result_csv_path = os.path.join(args.save_folder, f'test_results_epoch{args.epoch}.csv')
-    with open(result_csv_path, 'w', newline='', encoding='utf-8') as f:
-        csv_writer = csv.writer(f)
-        csv_writer.writerow(result_headers)  # 写入表头
-        csv_writer.writerows(test_results)   # 写入所有样本和总体结果
-    logger.info(f"[结果保存] 测试详细结果已保存至: {result_csv_path}")
-
-    # -------------------------- 原有功能：保存混淆矩阵和整体结果 --------------------------
-    # 保存预测和标签的整体pickle文件
+    # 保存整体结果和指标
     with open(os.path.join(args.save_folder, "pred_all.pickle"), 'wb') as f:
         pickle.dump({'pred': pred_save, 'names': sample_names}, f, protocol=pickle.HIGHEST_PROTOCOL)
     with open(os.path.join(args.save_folder, "label_all.pickle"), 'wb') as f:
         pickle.dump({'label': label_save, 'names': sample_names}, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # 保存混淆矩阵到CSV
+    iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
+    accuracy_class = intersection_meter.sum / (target_meter.sum + 1e-10)
+    mIoU = np.mean(iou_class)
+    mAcc = np.mean(accuracy_class)
+    allAcc = sum(intersection_meter.sum) / (sum(target_meter.sum) + 1e-10)
+
+    logger.info('=' * 50)
+    logger.info(f'Overall Test Result: mIoU={mIoU:.4f}, mAcc={mAcc:.4f}, allAcc={allAcc:.4f}')
+    logger.info('=' * 50)
+
+    for i in range(args.classes):
+        logger.info(
+            f'Class {i} ({names[i]}): '
+            f'IoU={iou_class[i]:.4f}, Accuracy={accuracy_class[i]:.4f}'
+        )
+
+    # 计算每类的预测占比（混淆矩阵归一化）
+    row_sums = confusion_matrix.sum(axis=1, keepdims=True)
+    # 避免除零错误
+    row_sums[row_sums == 0] = 1
+    pred_proportion = confusion_matrix / row_sums
+
+    # 保存混淆矩阵和预测占比到CSV
     cm_csv_path = os.path.join(args.save_folder, 'confusion_matrix.csv')
-    with open(cm_csv_path, 'w', newline='', encoding='utf-8') as f:
+    with open(cm_csv_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow([''] + [f'预测为{cls_name}' for cls_name in names])
-        # 写入混淆矩阵（数量）
-        writer.writerow(['混淆矩阵（样本数量）'] + [''] * args.classes)
+        # 写入表头
+        writer.writerow([''] + [f'预测为{name}' for name in names])
+
+        # 写入混淆矩阵数据
+        writer.writerow(['混淆矩阵（数量）'] + [''] * args.classes)
         for i in range(args.classes):
             writer.writerow([f'实际为{names[i]}'] + confusion_matrix[i].tolist())
-        # 写入预测占比（比例）
-        row_sums = confusion_matrix.sum(axis=1, keepdims=True)
-        row_sums[row_sums == 0] = 1  # 避免除零
-        pred_proportion = confusion_matrix / row_sums
+
+        # 写入预测占比数据
         writer.writerow([])
         writer.writerow(['预测占比（比例）'] + [''] * args.classes)
         for i in range(args.classes):
             writer.writerow([f'实际为{names[i]}'] + [f'{p:.4f}' for p in pred_proportion[i]])
-    logger.info(f"混淆矩阵已保存至: {cm_csv_path}")
 
-    # 输出总体评估结果
-    logger.info('=' * 60)
-    logger.info(f'[总体测试结果] mIoU={total_miou:.4f}, mAcc={np.mean(total_cls_acc):.4f}, OA={total_oa:.4f}')
-    logger.info('=' * 60)
-    for i, cls_name in enumerate(names):
-        logger.info(
-            f'[总体每类指标] {cls_name} (类别{i}): IoU={total_cls_iou[i]:.4f}, Acc={total_cls_acc[i]:.4f}'
-        )
-
-    # 移除文件处理器（避免后续重复写入）
-    logger.removeHandler(file_handler)
-    logger.info('<<<<<<<<<<<<<<<<< 测试结束 <<<<<<<<<<<<<<<<<')
+    logger.info(f"混淆矩阵及预测占比已保存至 {cm_csv_path}")
+    logger.info('<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<')
 
 
 if __name__ == '__main__':
