@@ -474,7 +474,7 @@ class DownBlock(OriginalDownBlock):
         # 初始化MMCA模块
         if self.use_mmca:
             self.mmca = MMCAModule(
-                in_channels=embed_channels,  # 注意：下采样后通道数已变为embed_channels
+                in_channels=embed_channels,
                 **(mmca_kwargs or {})
             )
             print(f"[DownBlock] MMCA已启用 - 输入通道: {embed_channels}")
@@ -482,44 +482,58 @@ class DownBlock(OriginalDownBlock):
             print(f"[DownBlock] MMCA未启用")
 
     def forward(self, x, normals, coords, colors):
-        # 1. 执行下采样（spconv的SparseConv3d不支持return_indices，直接下采样）
-        x = self.down(x)  # 仅返回下采样后的稀疏张量
+        # 1. 执行下采样
+        x_down = self.down(x)  # 下采样后的稀疏张量（特征数：N_new）
 
-        # 2. 生成下采样后的体素索引，用于聚合多模态特征（确保数量匹配）
-        coord = x.indices[:, 1:].float()  # 下采样后的空间坐标 [N_new, 3]
-        batch = x.indices[:, 0]  # 批次索引
-        # 使用第一个网格大小生成体素聚类（与编码器配置对齐）
+        # 2. 生成聚类索引（关键修改：基于原始坐标生成，长度与原始特征一致）
+        # 2.1 获取原始坐标的批次信息（假设coords的批次索引在x.indices中，需与原始点对齐）
+        # 注意：这里需要确保原始点的批次索引与下采样后的批次索引兼容
+        batch_size = x.indices[:, 0].max().item() + 1  # 从原始特征获取批次大小
+        original_batch = torch.zeros(coords.shape[0], dtype=torch.long, device=coords.device)
+        for b in range(batch_size):
+            # 找到原始点中属于当前批次的索引（假设x.indices包含原始点的批次信息）
+            mask = x.indices[:, 0] == b
+            if mask.any():
+                original_batch[mask] = b
+
+        # 2.2 使用与下采样匹配的网格大小，为原始坐标生成聚类索引
         grid_size = self.point_grid_size[0] if self.point_grid_size else 0.1
-        cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
-        _, cluster = torch.unique(cluster, return_inverse=True)  # 确保索引连续
+        # 基于原始坐标coords生成聚类，确保cluster长度 = 原始点数量（30000）
+        cluster = voxel_grid(pos=coords, size=grid_size, batch=original_batch)
+        # 映射到连续索引（范围：0 ~ N_new-1，与下采样后的特征数匹配）
+        _, cluster = torch.unique(cluster, return_inverse=True)
 
-        # 3. 对多模态特征进行聚合（与下采样后的特征数量匹配）
-        # 注意：原始coords/colors/normals是下采样前的，需要按体素聚合
+        # 3. 聚合多模态特征（此时cluster长度与原始coords一致，可正确聚合）
         coords_down = scatter(coords, cluster, reduce="mean")  # [N_new, 3]
         colors_down = scatter(colors, cluster, reduce="mean")  # [N_new, 3]
         normals_down = scatter(normals, cluster, reduce="mean")  # [N_new, 3]
-        print(f"[DownBlock] 下采样后 - 特征点数量: {x.features.shape[0]}, 多模态特征点数量: {coords_down.shape[0]}")
+        print(f"[DownBlock] 聚合后 - 下采样特征数: {x_down.features.shape[0]}, 多模态特征数: {coords_down.shape[0]}")
 
-        # 4. 应用MMCA（使用聚合后的多模态特征）
+        # 4. 应用MMCA（确保特征数匹配）
         if self.use_mmca and hasattr(self, 'mmca'):
-            feat = x.features
-            print(f"[DownBlock] 应用MMCA - 特征形状: {feat.shape}, 多模态特征形状: {coords_down.shape}")
-            feat = self.mmca(feat, coords_down, colors_down, normals_down)  # 维度匹配
-            x = x.replace_feature(feat)
+            feat = x_down.features
+            # 安全检查：确保聚合后的多模态特征数与下采样特征数一致
+            assert coords_down.shape[0] == feat.shape[0], \
+                f"MMCA输入不匹配: 多模态特征数 {coords_down.shape[0]} vs 下采样特征数 {feat.shape[0]}"
+            feat = self.mmca(feat, coords_down, colors_down, normals_down)
+            x_down = x_down.replace_feature(feat)
 
-        # 5. 生成聚类并处理BasicBlock
+        # 5. 生成用于BasicBlock的聚类（基于下采样后的坐标）
+        coord_down = x_down.indices[:, 1:].float()  # 下采样后的坐标
+        batch_down = x_down.indices[:, 0]  # 下采样后的批次索引
         clusters = []
         for grid_size in self.point_grid_size:
-            cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
-            _, cluster = torch.unique(cluster, return_inverse=True)
-            clusters.append(cluster)
+            cluster_down = voxel_grid(pos=coord_down, size=grid_size, batch=batch_down)
+            _, cluster_down = torch.unique(cluster_down, return_inverse=True)
+            clusters.append(cluster_down)
 
+        # 6. 处理BasicBlock
         curvature = None
         for block in self.blocks:
-            x, block_curvature = block(x, clusters, normals=normals_down)  # 使用下采样后的法向量
+            x_down, block_curvature = block(x_down, clusters, normals=normals_down)
             if block_curvature is not None:
                 curvature = block_curvature
-        return x, curvature
+        return x_down, curvature
 
 
 # --- 改进的主模型 ---
