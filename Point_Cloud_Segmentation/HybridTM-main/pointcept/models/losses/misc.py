@@ -35,7 +35,7 @@ class CrossEntropyLoss(nn.Module):
             label_smoothing=label_smoothing,
         )
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, **kwargs):
         return self.loss(pred, target) * self.loss_weight
 
 
