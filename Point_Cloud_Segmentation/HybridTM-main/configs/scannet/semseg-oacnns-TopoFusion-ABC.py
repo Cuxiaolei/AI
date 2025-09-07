@@ -50,7 +50,7 @@ model = dict(
             curvature_threshold=0.1,  # 曲率阈值
             pseudo_weight=0.3,  # 伪标签损失权重
             physical_weight=0.2,  # 物理先验权重
-            debug=True
+            debug=False
         )
     ],
 )
@@ -134,7 +134,7 @@ data = dict(
                 return_grid_coord=True,
                 return_min_coord=True,
             ),
-            dict(type="SphereCrop", point_max=50000, mode='center'),
+            dict(type="SphereCrop", point_max=10000, mode='center'),
             # dict(type="SphereCrop", point_max=20000, mode="center"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
