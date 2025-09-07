@@ -177,10 +177,32 @@ class Trainer(TrainerBase):
         input_dict = self.comm_info["input_dict"]
         # import ipdb; ipdb.set_trace()
         # 新增输入维度检查
-        if comm.is_main_process():
-            feats = input_dict["feat"]
-            assert feats.shape[-1] == 9, \
-                f"输入特征通道数错误: 实际{feats.shape[-1]}, 期望9"
+        def run_step(self):
+            input_dict = self.comm_info["input_dict"]
+            if comm.is_main_process():
+                feats = input_dict["feat"]
+                # 总通道数检查（已通过）
+                assert feats.shape[-1] == 9, f"总通道数错误: {feats.shape[-1]}"
+
+                # 拆分特征为三部分（假设模型期望顺序：坐标(0-2)、法向量(3-5)、颜色(6-8)）
+                coord = feats[..., 0:3]  # 前3通道：坐标
+                normal = feats[..., 3:6]  # 中间3通道：法向量
+                color = feats[..., 6:9]  # 后3通道：颜色
+
+                # 检查法向量是否为无效值（全零或接近零）
+                normal_mean = normal.mean().item()
+                normal_nonzero = (normal.abs() > 1e-6).float().mean().item()  # 非零比例
+                print(f"法向量均值: {normal_mean:.6f}, 非零比例: {normal_nonzero:.2%}")
+
+                # 检查颜色是否为无效值（颜色通常在[0,1]或[0,255]范围内）
+                color_mean = color.mean().item()
+                color_nonzero = (color.abs() > 1e-6).float().mean().item()
+                print(f"颜色特征均值: {color_mean:.6f}, 非零比例: {color_nonzero:.2%}")
+
+                # 断言法向量和颜色存在有效数据
+                assert normal_nonzero > 0.1, "法向量几乎全为零，可能未正确加载"
+                assert color_nonzero > 0.1, "颜色特征几乎全为零，可能未正确加载"
+
         for key in input_dict.keys():
             if isinstance(input_dict[key], torch.Tensor):
                 input_dict[key] = input_dict[key].cuda(non_blocking=True)
