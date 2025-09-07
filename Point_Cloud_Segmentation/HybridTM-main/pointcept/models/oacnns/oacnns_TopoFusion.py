@@ -217,22 +217,22 @@ class OriginalUpBlock(nn.Module):
 # --- 创新点1: 拓扑感知图卷积（PL-TopoConv）实现 ---
 def compute_curvature(normals, k=16):
     """计算点云的曲率"""
-    print(f"[PL-TopoConv] compute_curvature - 输入法向量形状: {normals.shape}, k={k}")
+    # print(f"[PL-TopoConv] compute_curvature - 输入法向量形状: {normals.shape}, k={k}")
     if normals.size(0) < k:
-        print(f"[PL-TopoConv] 点数量不足({normals.size(0)} < {k})，返回零曲率")
+        # print(f"[PL-TopoConv] 点数量不足({normals.size(0)} < {k})，返回零曲率")
         return torch.zeros(normals.size(0), device=normals.device)
 
     # 计算KNN邻接
     edge_index = knn(normals, normals, k=k)  # [2, E]
-    print(f"[PL-TopoConv] KNN邻接边数量: {edge_index.size(1)}")
+    # print(f"[PL-TopoConv] KNN邻接边数量: {edge_index.size(1)}")
     row, col = edge_index[0], edge_index[1]
 
     # 计算法向量夹角的曲率近似
     dot_product = torch.sum(normals[row] * normals[col], dim=1)
     cos_theta = torch.clamp(dot_product, -1.0, 1.0)
     curvature = 1.0 - cos_theta
-    print(
-        f"[PL-TopoConv] 原始曲率统计 - min: {curvature.min():.4f}, max: {curvature.max():.4f}, mean: {curvature.mean():.4f}")
+    # print(
+        # f"[PL-TopoConv] 原始曲率统计 - min: {curvature.min():.4f}, max: {curvature.max():.4f}, mean: {curvature.mean():.4f}")
 
     # 聚合邻域曲率
     N = normals.size(0)
@@ -242,35 +242,35 @@ def compute_curvature(normals, k=16):
 
     count = torch.full((N,), k, device=normals.device, dtype=torch.float)
     avg_curvature = curvature_per_point / count
-    print(
-        f"[PL-TopoConv] 平均曲率统计 - min: {avg_curvature.min():.4f}, max: {avg_curvature.max():.4f}, mean: {avg_curvature.mean():.4f}")
+    # print(
+        # f"[PL-TopoConv] 平均曲率统计 - min: {avg_curvature.min():.4f}, max: {avg_curvature.max():.4f}, mean: {avg_curvature.mean():.4f}")
     return avg_curvature
 
 
 def topo_aware_knn_weight(coords, normals, k=16, angle_weight=1.0, curvature_weight=1.0):
     """基于法向一致性和曲率生成拓扑感知的KNN邻域权重"""
     N = coords.size(0)
-    print(f"[PL-TopoConv] topo_aware_knn_weight - 坐标形状: {coords.shape}, 法向量形状: {normals.shape}, k={k}")
+    # print(f"[PL-TopoConv] topo_aware_knn_weight - 坐标形状: {coords.shape}, 法向量形状: {normals.shape}, k={k}")
     if N < 2:
-        print(f"[PL-TopoConv] 点数量过少({N})，返回空权重")
+        # print(f"[PL-TopoConv] 点数量过少({N})，返回空权重")
         return torch.empty((2, 0), dtype=torch.long, device=coords.device), torch.tensor([], device=coords.device)
 
     # 标准KNN获取邻接
     edge_index_full = knn(coords, coords, k=min(k, N - 1))
     if edge_index_full.size(1) == 0:
-        print(f"[PL-TopoConv] 未生成邻接边")
+        # print(f"[PL-TopoConv] 未生成邻接边")
         return edge_index_full, torch.tensor([], device=coords.device)
 
     row_full, col_full = edge_index_full[0], edge_index_full[1]
-    print(f"[PL-TopoConv] 邻接边覆盖点数量 - 行: {row_full.unique().numel()}, 列: {col_full.unique().numel()}")
+    # print(f"[PL-TopoConv] 邻接边覆盖点数量 - 行: {row_full.unique().numel()}, 列: {col_full.unique().numel()}")
 
     # 计算法向夹角权重
     norm_row = F.normalize(normals[row_full], dim=-1)
     norm_col = F.normalize(normals[col_full], dim=-1)
     cos_angle = torch.sum(norm_row * norm_col, dim=1).clamp(-1, 1)
     angle_w = (1.0 + cos_angle) / 2.0
-    print(
-        f"[PL-TopoConv] 角度权重统计 - min: {angle_w.min():.4f}, max: {angle_w.max():.4f}, mean: {angle_w.mean():.4f}")
+    # print(
+        # f"[PL-TopoConv] 角度权重统计 - min: {angle_w.min():.4f}, max: {angle_w.max():.4f}, mean: {angle_w.mean():.4f}")
 
     # 计算曲率权重
     curvature = compute_curvature(normals, k=k)
@@ -278,12 +278,12 @@ def topo_aware_knn_weight(coords, normals, k=16, angle_weight=1.0, curvature_wei
     curv_col = curvature[col_full]
     avg_curv = (curv_row + curv_col) / 2.0
     curv_w = torch.exp(-curvature_weight * avg_curv)
-    print(f"[PL-TopoConv] 曲率权重统计 - min: {curv_w.min():.4f}, max: {curv_w.max():.4f}, mean: {curv_w.mean():.4f}")
+    # print(f"[PL-TopoConv] 曲率权重统计 - min: {curv_w.min():.4f}, max: {curv_w.max():.4f}, mean: {curv_w.mean():.4f}")
 
     # 综合权重
     combined_weight = (angle_weight * angle_w) * (curv_w)
-    print(
-        f"[PL-TopoConv] 综合权重统计 - min: {combined_weight.min():.4f}, max: {combined_weight.max():.4f}, mean: {combined_weight.mean():.4f}")
+    # print(
+        # f"[PL-TopoConv] 综合权重统计 - min: {combined_weight.min():.4f}, max: {combined_weight.max():.4f}, mean: {combined_weight.mean():.4f}")
 
     return edge_index_full, combined_weight
 
@@ -326,7 +326,7 @@ class MMCAModule(nn.Module):
     def forward(self, x, coords, colors, normals):
         # x: [N, C],  coords/colors/normals: [N, 3]
         N, C = x.shape
-        print(f"[MMCA] 前向传播 - 输入特征形状: {x.shape}, 坐标/颜色/法向量形状: {coords.shape}")
+        # print(f"[MMCA] 前向传播 - 输入特征形状: {x.shape}, 坐标/颜色/法向量形状: {coords.shape}")
 
         # 计算各模态注意力权重（无需批处理repeat，直接对每个点计算）
         coord_attn = self.coord_mlp(coords).sigmoid()  # [N, 1]
@@ -369,14 +369,14 @@ class BasicBlock(OriginalBasicBlock):
         # 初始化拓扑卷积层
         if self.use_pl_topoconv:
             self.topo_conv = nn.Linear(embed_channels, embed_channels, bias=False)
-            print(f"[BasicBlock] PL-TopoConv已启用 - 拓扑卷积层初始化 (输入: {embed_channels}, 输出: {embed_channels})")
+            # print(f"[BasicBlock] PL-TopoConv已启用 - 拓扑卷积层初始化 (输入: {embed_channels}, 输出: {embed_channels})")
         else:
             print(f"[BasicBlock] PL-TopoConv未启用")
 
     def forward(self, x, clusters, normals=None):
         feat = x.features
         feats = []
-        print(f"[BasicBlock] 前向传播 - 初始特征形状: {feat.shape}, 聚类数量: {len(clusters)}")
+        # print(f"[BasicBlock] 前向传播 - 初始特征形状: {feat.shape}, 聚类数量: {len(clusters)}")
 
         for i, cluster in enumerate(clusters):
             pw = self.l_w[i](feat)
@@ -388,7 +388,7 @@ class BasicBlock(OriginalBasicBlock):
             # 应用PL-TopoConv
             if self.use_pl_topoconv and normals is not None:
                 coords = x.indices[:, 1:].float()  # 获取坐标
-                print(f"[BasicBlock] 应用PL-TopoConv - 坐标形状: {coords.shape}, 法向量形状: {normals.shape}")
+                # print(f"[BasicBlock] 应用PL-TopoConv - 坐标形状: {coords.shape}, 法向量形状: {normals.shape}")
                 edge_index, topo_weights = topo_aware_knn_weight(
                     coords, normals,
                     k=self.pl_topoconv_kwargs.get('k', 16),
@@ -399,9 +399,9 @@ class BasicBlock(OriginalBasicBlock):
                 if edge_index.numel() > 0:
                     row, col = edge_index
                     topo_feat = scatter(feat[col] * topo_weights.unsqueeze(1), row, reduce='mean')
-                    print(f"[BasicBlock] 拓扑特征形状: {topo_feat.shape}, 原始特征形状: {feat.shape}")
+                    # print(f"[BasicBlock] 拓扑特征形状: {topo_feat.shape}, 原始特征形状: {feat.shape}")
                     feat = feat + self.topo_conv(topo_feat)
-                    print(f"[BasicBlock] 拓扑特征融合完成 - 新特征形状: {feat.shape}")
+                    # print(f"[BasicBlock] 拓扑特征融合完成 - 新特征形状: {feat.shape}")
                 else:
                     print(f"[BasicBlock] 无有效邻接边，跳过PL-TopoConv")
             elif self.use_pl_topoconv:
@@ -429,8 +429,8 @@ class BasicBlock(OriginalBasicBlock):
         # 计算并返回曲率
         curvature = compute_curvature(normals, k=self.pl_topoconv_kwargs.get('k', 16)) if (
                 self.use_pl_topoconv and normals is not None) else None
-        print(
-            f"[BasicBlock] 输出特征形状: {x.features.shape}, 曲率形状: {curvature.shape if curvature is not None else 'None'}")
+        # print(
+            # f"[BasicBlock] 输出特征形状: {x.features.shape}, 曲率形状: {curvature.shape if curvature is not None else 'None'}")
         return x, curvature
 
 
@@ -477,7 +477,7 @@ class DownBlock(OriginalDownBlock):
                 in_channels=embed_channels,
                 **(mmca_kwargs or {})
             )
-            print(f"[DownBlock] MMCA已启用 - 输入通道: {embed_channels}")
+            # print(f"[DownBlock] MMCA已启用 - 输入通道: {embed_channels}")
         else:
             print(f"[DownBlock] MMCA未启用")
 
@@ -485,7 +485,7 @@ class DownBlock(OriginalDownBlock):
         # 1. 执行下采样
         x_down = self.down(x)  # 下采样后的稀疏张量（特征数：N_new）
         N_new = x_down.features.shape[0]  # 下采样后的特征数量
-        print(f"[DownBlock] 下采样后特征数: {N_new}")
+        # print(f"[DownBlock] 下采样后特征数: {N_new}")
 
         # 2. 生成与下采样特征匹配的多模态特征（关键修复：同步更新coords/colors/normals）
         # 2.1 提取当前阶段的坐标和批次信息（基于下采样后的x_down）
@@ -498,14 +498,14 @@ class DownBlock(OriginalDownBlock):
         voxel_size = self.calculate_matching_voxel_size(
             current_coord, current_batch, target_num_clusters=N_new
         )
-        print(f"[DownBlock] 动态计算的网格大小: {voxel_size}")
+        # print(f"[DownBlock] 动态计算的网格大小: {voxel_size}")
 
         # 2.3 为原始多模态特征生成聚类索引（长度与原始coords一致）
         # 生成与原始coords匹配的批次索引（扩展当前批次索引以匹配原始长度）
         original_batch = self.expand_batch(current_batch, x.indices[:, 0], coords.shape[0])
         cluster = voxel_grid(pos=coords, size=voxel_size, batch=original_batch)
         _, cluster = torch.unique(cluster, return_inverse=True)
-        print(f"[DownBlock] 聚类数量: {cluster.max().item() + 1}")
+        # print(f"[DownBlock] 聚类数量: {cluster.max().item() + 1}")
 
         # 3. 聚合多模态特征（使长度与N_new一致）
         coords_down = scatter(coords, cluster, reduce="mean")  # [N_cluster, 3]
@@ -514,7 +514,7 @@ class DownBlock(OriginalDownBlock):
 
         # 4. 强制聚类数量与下采样特征数匹配
         if coords_down.shape[0] != N_new:
-            print(f"[DownBlock] 警告: 聚类数量({coords_down.shape[0]})与下采样特征数({N_new})不匹配，进行调整...")
+            # print(f"[DownBlock] 警告: 聚类数量({coords_down.shape[0]})与下采样特征数({N_new})不匹配，进行调整...")
             if coords_down.shape[0] < N_new:
                 repeat_times = (N_new // coords_down.shape[0]) + 1
                 coords_down = coords_down.repeat(repeat_times, 1)[:N_new]
@@ -708,16 +708,16 @@ class OACNNs_TopoFusion(nn.Module):
         feat = input_dict["feat"]
         offset = input_dict["offset"]
         batch = offset2batch(offset)
-        print(
-            f"[Model] 输入特征形状: {feat.shape}, 离散坐标形状: {discrete_coord.shape}, 批次大小: {batch[-1].item() + 1}")
+        # print(
+            # f"[Model] 输入特征形状: {feat.shape}, 离散坐标形状: {discrete_coord.shape}, 批次大小: {batch[-1].item() + 1}")
 
         # 提取多模态特征
         coords = feat[..., 0:3]  # 前3通道：坐标
         colors = feat[..., 3:6]  # 中间3通道：法向量
         normals = feat[..., 6:9]  # 后3通道：颜色
-        print(f"[Model] 多模态特征 - 坐标: {coords.shape if coords is not None else 'None'}, "
-              f"颜色: {colors.shape if colors is not None else 'None'}, "
-              f"法向量: {normals.shape if normals is not None else 'None'}")
+        # print(f"[Model] 多模态特征 - 坐标: {coords.shape if coords is not None else 'None'}, "
+        #       f"颜色: {colors.shape if colors is not None else 'None'}, "
+        #       f"法向量: {normals.shape if normals is not None else 'None'}")
 
         # 构建稀疏张量
         x = spconv.SparseConvTensor(
@@ -730,45 +730,45 @@ class OACNNs_TopoFusion(nn.Module):
             ).tolist(),
             batch_size=batch[-1].tolist() + 1,
         )
-        print(f"[Model] 稀疏张量构建完成 - 空间形状: {x.spatial_shape}, 批次大小: {x.batch_size}")
+        # print(f"[Model] 稀疏张量构建完成 - 空间形状: {x.spatial_shape}, 批次大小: {x.batch_size}")
 
         # 初始卷积
         x = self.stem(x)
-        print(f"[Model] 初始卷积后特征形状: {x.features.shape}")
+        # print(f"[Model] 初始卷积后特征形状: {x.features.shape}")
         skips = [x]
         curvatures = []
 
         # 编码器传播
         for i in range(self.num_stages):
-            print(f"\n[Model] 编码器阶段 {i + 1}/{self.num_stages}")
+            # print(f"\n[Model] 编码器阶段 {i + 1}/{self.num_stages}")
             x, curvature, coords, colors, normals = self.enc[i](x, normals, coords, colors)
             # x, curvature = self.enc[i](x, normals, coords, colors)
             skips.append(x)
             if curvature is not None:
                 curvatures.append(curvature)
-                print(f"[Model] 编码器阶段 {i + 1} 曲率形状: {curvature.shape}")
-            print(f"[Model] 编码器阶段 {i + 1} 输出特征形状: {x.features.shape}")
+                # print(f"[Model] 编码器阶段 {i + 1} 曲率形状: {curvature.shape}")
+            # print(f"[Model] 编码器阶段 {i + 1} 输出特征形状: {x.features.shape}")
 
         # 解码器传播
         x = skips.pop(-1)
-        print(f"\n[Model] 解码器开始 - 初始特征形状: {x.features.shape}")
+        # print(f"\n[Model] 解码器开始 - 初始特征形状: {x.features.shape}")
         for i in reversed(range(self.num_stages)):
             skip = skips.pop(-1)
-            print(f"[Model] 解码器阶段 {i + 1}/{self.num_stages} - 跳跃连接特征形状: {skip.features.shape}")
+            # print(f"[Model] 解码器阶段 {i + 1}/{self.num_stages} - 跳跃连接特征形状: {skip.features.shape}")
             x = self.dec[i](x, skip)
-            print(f"[Model] 解码器阶段 {i + 1} 输出特征形状: {x.features.shape}")
+            # print(f"[Model] 解码器阶段 {i + 1} 输出特征形状: {x.features.shape}")
 
         # 最终预测
         x = self.final(x)
         seg_logits = x.features  # 预测结果
-        print(f"\n[Model] 最终预测形状: {seg_logits.shape}")
+        # print(f"\n[Model] 最终预测形状: {seg_logits.shape}")
 
         # 保存曲率用于损失计算（创新点3: PL-PLE Loss依赖）
         if curvatures:
             input_dict["curvatures"] = curvatures[-1]
-            print(f"[Model] 曲率已存入input_dict - 形状: {curvatures[-1].shape}")
+            # print(f"[Model] 曲率已存入input_dict - 形状: {curvatures[-1].shape}")
         else:
-            print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
+            # print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
 
         print(f"===== OACNNs_TopoFusion 前向传播结束 =====\n")
         return seg_logits
