@@ -690,9 +690,9 @@ class OACNNs_TopoFusion(nn.Module):
             f"[Model] 输入特征形状: {feat.shape}, 离散坐标形状: {discrete_coord.shape}, 批次大小: {batch[-1].item() + 1}")
 
         # 提取多模态特征
-        coords = feat.get("coord", None)
-        colors = feat.get("color", None)
-        normals = feat.get("normal", None)
+        coords = feat[..., 0:3]  # 前3通道：坐标
+        colors = feat[..., 3:6]  # 中间3通道：法向量
+        normals = feat[..., 6:9]  # 后3通道：颜色
         print(f"[Model] 多模态特征 - 坐标: {coords.shape if coords is not None else 'None'}, "
               f"颜色: {colors.shape if colors is not None else 'None'}, "
               f"法向量: {normals.shape if normals is not None else 'None'}")
