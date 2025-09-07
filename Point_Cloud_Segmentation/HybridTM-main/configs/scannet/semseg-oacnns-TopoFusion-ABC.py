@@ -134,6 +134,7 @@ data = dict(
                 return_grid_coord=True,
                 return_min_coord=True,
             ),
+            #
             dict(type="SphereCrop", point_max=10000, mode='center'),
             # dict(type="SphereCrop", point_max=20000, mode="center"),
             dict(type="CenterShift", apply_z=False),
