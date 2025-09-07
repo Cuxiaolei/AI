@@ -768,7 +768,7 @@ class OACNNs_TopoFusion(nn.Module):
             input_dict["curvatures"] = curvatures[-1]
             # print(f"[Model] 曲率已存入input_dict - 形状: {curvatures[-1].shape}")
         else:
-            # print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
+            print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
 
         print(f"===== OACNNs_TopoFusion 前向传播结束 =====\n")
         return seg_logits
