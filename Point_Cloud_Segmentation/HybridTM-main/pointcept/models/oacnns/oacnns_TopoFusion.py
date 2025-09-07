@@ -484,41 +484,55 @@ class DownBlock(OriginalDownBlock):
     def forward(self, x, normals, coords, colors):
         # 1. 执行下采样
         x_down = self.down(x)  # 下采样后的稀疏张量（特征数：N_new）
+        N_new = x_down.features.shape[0]  # 下采样后的特征数量
+        print(f"[DownBlock] 下采样后特征数: {N_new}")
 
-        # 2. 生成聚类索引（关键修改：基于原始坐标生成，长度与原始特征一致）
-        # 2.1 获取原始坐标的批次信息（假设coords的批次索引在x.indices中，需与原始点对齐）
-        # 注意：这里需要确保原始点的批次索引与下采样后的批次索引兼容
-        batch_size = x.indices[:, 0].max().item() + 1  # 从原始特征获取批次大小
-        original_batch = torch.zeros(coords.shape[0], dtype=torch.long, device=coords.device)
-        for b in range(batch_size):
-            # 找到原始点中属于当前批次的索引（假设x.indices包含原始点的批次信息）
-            mask = x.indices[:, 0] == b
-            if mask.any():
-                original_batch[mask] = b
+        # 2. 生成与下采样特征匹配的聚类索引
+        # 2.1 提取原始点的批次信息（与x保持一致）
+        original_batch = x.indices[:, 0]  # 原始点的批次索引 [N_original]
+        batch_size = original_batch.max().item() + 1
 
-        # 2.2 使用与下采样匹配的网格大小，为原始坐标生成聚类索引
-        grid_size = self.point_grid_size[0] if self.point_grid_size else 0.1
-        # 基于原始坐标coords生成聚类，确保cluster长度 = 原始点数量（30000）
-        cluster = voxel_grid(pos=coords, size=grid_size, batch=original_batch)
-        # 映射到连续索引（范围：0 ~ N_new-1，与下采样后的特征数匹配）
+        # 2.2 动态计算网格大小：基于原始点数量和下采样后数量的比例
+        # 确保聚类数量接近N_new（下采样后的特征数）
+        voxel_size = self.calculate_matching_voxel_size(
+            coords, original_batch, target_num_clusters=N_new
+        )
+        print(f"[DownBlock] 动态计算的网格大小: {voxel_size}")
+
+        # 2.3 基于原始坐标和动态网格大小生成聚类
+        cluster = voxel_grid(pos=coords, size=voxel_size, batch=original_batch)
         _, cluster = torch.unique(cluster, return_inverse=True)
+        print(f"[DownBlock] 聚类数量: {cluster.max().item() + 1}")
 
-        # 3. 聚合多模态特征（此时cluster长度与原始coords一致，可正确聚合）
-        coords_down = scatter(coords, cluster, reduce="mean")  # [N_new, 3]
-        colors_down = scatter(colors, cluster, reduce="mean")  # [N_new, 3]
-        normals_down = scatter(normals, cluster, reduce="mean")  # [N_new, 3]
-        print(f"[DownBlock] 聚合后 - 下采样特征数: {x_down.features.shape[0]}, 多模态特征数: {coords_down.shape[0]}")
+        # 3. 聚合多模态特征
+        coords_down = scatter(coords, cluster, reduce="mean")  # [N_cluster, 3]
+        colors_down = scatter(colors, cluster, reduce="mean")  # [N_cluster, 3]
+        normals_down = scatter(normals, cluster, reduce="mean")  # [N_cluster, 3]
 
-        # 4. 应用MMCA（确保特征数匹配）
+        # 4. 强制聚类数量与下采样特征数匹配（关键修复）
+        if coords_down.shape[0] != N_new:
+            print(f"[DownBlock] 警告: 聚类数量({coords_down.shape[0]})与下采样特征数({N_new})不匹配，进行调整...")
+            # 当聚类数量少于目标时，重复填充；多于目标时，截断（简单处理，更优方案需根据业务调整）
+            if coords_down.shape[0] < N_new:
+                repeat_times = (N_new // coords_down.shape[0]) + 1
+                coords_down = coords_down.repeat(repeat_times, 1)[:N_new]
+                colors_down = colors_down.repeat(repeat_times, 1)[:N_new]
+                normals_down = normals_down.repeat(repeat_times, 1)[:N_new]
+            else:
+                coords_down = coords_down[:N_new]
+                colors_down = colors_down[:N_new]
+                normals_down = normals_down[:N_new]
+
+        # 5. 应用MMCA（确保特征数匹配）
         if self.use_mmca and hasattr(self, 'mmca'):
             feat = x_down.features
-            # 安全检查：确保聚合后的多模态特征数与下采样特征数一致
+            # 验证维度匹配
             assert coords_down.shape[0] == feat.shape[0], \
                 f"MMCA输入不匹配: 多模态特征数 {coords_down.shape[0]} vs 下采样特征数 {feat.shape[0]}"
             feat = self.mmca(feat, coords_down, colors_down, normals_down)
             x_down = x_down.replace_feature(feat)
 
-        # 5. 生成用于BasicBlock的聚类（基于下采样后的坐标）
+        # 6. 生成用于BasicBlock的聚类（基于下采样后的坐标）
         coord_down = x_down.indices[:, 1:].float()  # 下采样后的坐标
         batch_down = x_down.indices[:, 0]  # 下采样后的批次索引
         clusters = []
@@ -527,13 +541,36 @@ class DownBlock(OriginalDownBlock):
             _, cluster_down = torch.unique(cluster_down, return_inverse=True)
             clusters.append(cluster_down)
 
-        # 6. 处理BasicBlock
+        # 7. 处理BasicBlock
         curvature = None
         for block in self.blocks:
             x_down, block_curvature = block(x_down, clusters, normals=normals_down)
             if block_curvature is not None:
                 curvature = block_curvature
         return x_down, curvature
+
+    def calculate_matching_voxel_size(self, coords, batch, target_num_clusters):
+        """动态计算网格大小，使聚类数量接近目标值（下采样后的特征数）"""
+        voxel_size = 0.1  # 初始值
+        min_size, max_size = 0.001, 1.0  # 网格大小范围
+
+        # 二分查找合适的网格大小
+        for _ in range(10):  # 迭代10次足够收敛
+            cluster = voxel_grid(pos=coords, size=voxel_size, batch=batch)
+            current_clusters = cluster.unique().numel()
+
+            # 根据当前聚类数量调整网格大小
+            if current_clusters < target_num_clusters * 0.9:
+                voxel_size *= 0.8  # 聚类太少，减小网格
+            elif current_clusters > target_num_clusters * 1.1:
+                voxel_size *= 1.2  # 聚类太多，增大网格
+            else:
+                break  # 已接近目标
+
+            # 限制网格大小范围
+            voxel_size = max(min_size, min(voxel_size, max_size))
+
+        return voxel_size
 
 
 # --- 改进的主模型 ---
