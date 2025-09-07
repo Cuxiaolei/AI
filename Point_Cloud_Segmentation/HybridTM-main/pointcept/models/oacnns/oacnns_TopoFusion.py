@@ -480,43 +480,42 @@ class DownBlock(OriginalDownBlock):
         else:
             print(f"[DownBlock] MMCA未启用")
 
-    class DownBlock(nn.Module):
-        def forward(self, x, normals, coords, colors):
-            # 1. 先执行下采样（获取下采样后的特征和索引）
-            # 注意：需要记录下采样保留的点索引（假设下采样操作会返回保留的indices）
-            x, keep_indices = self.down(x, return_indices=True)  # 假设修改down方法返回保留的索引
-            # 若原down方法不支持返回indices，可通过前后特征形状差异推断，或在down模块中添加记录逻辑
+    def forward(self, x, normals, coords, colors):
+        # 1. 先执行下采样（获取下采样后的特征和索引）
+        # 注意：需要记录下采样保留的点索引（假设下采样操作会返回保留的indices）
+        x, keep_indices = self.down(x, return_indices=True)  # 假设修改down方法返回保留的索引
+        # 若原down方法不支持返回indices，可通过前后特征形状差异推断，或在down模块中添加记录逻辑
 
-            # 2. 根据保留的索引筛选多模态特征（确保点数量匹配）
-            # keep_indices: 下采样后保留的点在原始特征中的索引，形状为 [N_new]
-            coords = coords[keep_indices]  # [N_new, 3]
-            colors = colors[keep_indices]  # [N_new, 3]
-            normals = normals[keep_indices]  # [N_new, 3]
-            print(f"[DownBlock] 下采样后 - 特征点数量: {x.features.shape[0]}, 多模态特征点数量: {coords.shape[0]}")
+        # 2. 根据保留的索引筛选多模态特征（确保点数量匹配）
+        # keep_indices: 下采样后保留的点在原始特征中的索引，形状为 [N_new]
+        coords = coords[keep_indices]  # [N_new, 3]
+        colors = colors[keep_indices]  # [N_new, 3]
+        normals = normals[keep_indices]  # [N_new, 3]
+        print(f"[DownBlock] 下采样后 - 特征点数量: {x.features.shape[0]}, 多模态特征点数量: {coords.shape[0]}")
 
-            # 3. 生成聚类（基于下采样后的坐标）
-            coord = x.indices[:, 1:].float()  # 下采样后的空间坐标 [N_new, 3]
-            batch = x.indices[:, 0]
-            clusters = []
-            for grid_size in self.point_grid_size:
-                cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
-                _, cluster = torch.unique(cluster, return_inverse=True)
-                clusters.append(cluster)
+        # 3. 生成聚类（基于下采样后的坐标）
+        coord = x.indices[:, 1:].float()  # 下采样后的空间坐标 [N_new, 3]
+        batch = x.indices[:, 0]
+        clusters = []
+        for grid_size in self.point_grid_size:
+            cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
+            _, cluster = torch.unique(cluster, return_inverse=True)
+            clusters.append(cluster)
 
-            # 4. 应用MMCA（此时多模态特征已与特征x的点数量匹配）
-            if self.use_mmca and hasattr(self, 'mmca'):
-                feat = x.features
-                print(f"[DownBlock] 应用MMCA - 特征形状: {feat.shape}, 多模态特征形状: {coords.shape}")
-                feat = self.mmca(feat, coords, colors, normals)  # 此时维度匹配
-                x = x.replace_feature(feat)
+        # 4. 应用MMCA（此时多模态特征已与特征x的点数量匹配）
+        if self.use_mmca and hasattr(self, 'mmca'):
+            feat = x.features
+            print(f"[DownBlock] 应用MMCA - 特征形状: {feat.shape}, 多模态特征形状: {coords.shape}")
+            feat = self.mmca(feat, coords, colors, normals)  # 此时维度匹配
+            x = x.replace_feature(feat)
 
-            # 5. 处理BasicBlock（后续流程不变）
-            curvature = None
-            for block in self.blocks:
-                x, block_curvature = block(x, clusters, normals=normals)
-                if block_curvature is not None:
-                    curvature = block_curvature
-            return x, curvature
+        # 5. 处理BasicBlock（后续流程不变）
+        curvature = None
+        for block in self.blocks:
+            x, block_curvature = block(x, clusters, normals=normals)
+            if block_curvature is not None:
+                curvature = block_curvature
+        return x, curvature
 
 
 # --- 改进的主模型 ---
