@@ -17,7 +17,7 @@ class DefaultSegmentor(nn.Module):
     def forward(self, input_dict):
         if "condition" in input_dict.keys():
             input_dict["condition"] = input_dict["condition"][0]
-        seg_logits = self.backbone(input_dict)  # 模型计算时已将曲率存入input_dict["curvatures"]
+        seg_logits = self.backbone(input_dict)  # 模型计算时已将曲率存入input_dict["original_curvature"]
         # 提取曲率信息（模型中已处理，无曲率时为None）
         curvatures = input_dict.get("original_curvature", None)
 

@@ -190,12 +190,12 @@ class Trainer(TrainerBase):
             # 检查法向量是否为无效值（全零或接近零）
             normal_mean = normal.mean().item()
             normal_nonzero = (normal.abs() > 1e-6).float().mean().item()  # 非零比例
-            print(f"法向量均值: {normal_mean:.6f}, 非零比例: {normal_nonzero:.2%}")
+            # print(f"法向量均值: {normal_mean:.6f}, 非零比例: {normal_nonzero:.2%}")
 
             # 检查颜色是否为无效值（颜色通常在[0,1]或[0,255]范围内）
             color_mean = color.mean().item()
             color_nonzero = (color.abs() > 1e-6).float().mean().item()
-            print(f"颜色特征均值: {color_mean:.6f}, 非零比例: {color_nonzero:.2%}")
+            # print(f"颜色特征均值: {color_mean:.6f}, 非零比例: {color_nonzero:.2%}")
 
             # 断言法向量和颜色存在有效数据
             assert normal_nonzero > 0.1, "法向量几乎全为零，可能未正确加载"

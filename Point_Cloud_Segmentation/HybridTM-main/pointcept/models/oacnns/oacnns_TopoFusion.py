@@ -702,7 +702,7 @@ class OACNNs_TopoFusion(nn.Module):
         self.apply(self._init_weights)
 
     def forward(self, input_dict):
-        print(f"\n===== OACNNs_TopoFusion 前向传播开始 =====")
+        # print(f"\n===== OACNNs_TopoFusion 前向传播开始 =====")
         # 解析输入
         discrete_coord = input_dict["grid_coord"]
         feat = input_dict["feat"]
@@ -777,7 +777,7 @@ class OACNNs_TopoFusion(nn.Module):
         # else:
         #     print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
 
-        print(f"===== OACNNs_TopoFusion 前向传播结束 =====\n")
+        # print(f"===== OACNNs_TopoFusion 前向传播结束 =====\n")
         return seg_logits
 
     @staticmethod
