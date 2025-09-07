@@ -610,6 +610,9 @@ class OACNNs_TopoFusion(nn.Module):
         self.num_stages = len(enc_channels)
         self.embed_channels = embed_channels
 
+
+
+
         # 创新点配置日志
         print(f"\n===== 模型初始化 - 创新点配置 =====")
         print(f"PL-TopoConv 启用状态: {use_pl_topoconv}")
