@@ -13,7 +13,7 @@ epoch = 100  # total epoch, data loop = epoch // eval_epoch
 eval_epoch = 100 # sche total eval & checkpoint epoch
 
 sync_bn = False
-enable_amp = False
+enable_amp = True
 empty_cache = True
 empty_cache_per_epoch = False
 find_unused_parameters = False

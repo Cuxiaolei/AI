@@ -184,8 +184,8 @@ class Trainer(TrainerBase):
 
             # 拆分特征为三部分（假设模型期望顺序：坐标(0-2)、法向量(3-5)、颜色(6-8)）
             coord = feats[..., 0:3]  # 前3通道：坐标
-            normal = feats[..., 3:6]  # 中间3通道：法向量
-            color = feats[..., 6:9]  # 后3通道：颜色
+            color = feats[..., 3:6]  # 中间3通道：颜色
+            normal = feats[..., 6:9]  # 后3通道：法向量
 
             # 检查法向量是否为无效值（全零或接近零）
             normal_mean = normal.mean().item()
