@@ -16,17 +16,20 @@ class DefaultSegmentor(nn.Module):
 
     def forward(self, input_dict):
         if "condition" in input_dict.keys():
-            # PPT (https://arxiv.org/abs/2308.09718)
-            # currently, only support one batch one condition
             input_dict["condition"] = input_dict["condition"][0]
-        seg_logits = self.backbone(input_dict)
+        seg_logits = self.backbone(input_dict)  # 模型计算时已将曲率存入input_dict["curvatures"]
+        # 提取曲率信息（模型中已处理，无曲率时为None）
+        curvatures = input_dict.get("curvatures", None)
+
         # train
         if self.training:
-            loss = self.criteria(seg_logits, input_dict["segment"])
+            # 传递curvatures给损失函数
+            loss = self.criteria(seg_logits, input_dict["segment"], curvatures=curvatures)
             return dict(loss=loss)
         # eval
         elif "segment" in input_dict.keys():
-            loss = self.criteria(seg_logits, input_dict["segment"])
+            # 评估时同样传递曲率（如果需要计算损失）
+            loss = self.criteria(seg_logits, input_dict["segment"], curvatures=curvatures)
             return dict(loss=loss, seg_logits=seg_logits)
         # test
         else:
