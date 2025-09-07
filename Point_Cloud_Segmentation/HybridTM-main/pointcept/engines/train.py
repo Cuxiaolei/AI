@@ -176,6 +176,11 @@ class Trainer(TrainerBase):
     def run_step(self):
         input_dict = self.comm_info["input_dict"]
         # import ipdb; ipdb.set_trace()
+        # 新增输入维度检查
+        if comm.is_main_process():
+            feats = input_dict["feat"]
+            assert feats.shape[-1] == 9, \
+                f"输入特征通道数错误: 实际{feats.shape[-1]}, 期望9"
         for key in input_dict.keys():
             if isinstance(input_dict[key], torch.Tensor):
                 input_dict[key] = input_dict[key].cuda(non_blocking=True)
