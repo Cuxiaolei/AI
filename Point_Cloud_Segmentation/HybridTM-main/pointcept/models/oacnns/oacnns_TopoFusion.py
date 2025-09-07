@@ -297,95 +297,55 @@ class MMCAModule(nn.Module):
                  attn_hidden_dim=16):
         super().__init__()
         self.in_channels = in_channels
-        self.coord_channels = coord_channels
-        self.color_channels = color_channels
-        self.normal_channels = normal_channels
-
-        # 模态特征提取
+        # 保持模态特征提取器不变
         self.coord_mlp = nn.Sequential(
             nn.Linear(coord_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
             nn.ReLU(),
             nn.Linear(attn_hidden_dim, 1)
         )
-
         self.color_mlp = nn.Sequential(
             nn.Linear(color_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
             nn.ReLU(),
             nn.Linear(attn_hidden_dim, 1)
         )
-
         self.normal_mlp = nn.Sequential(
             nn.Linear(normal_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
             nn.ReLU(),
             nn.Linear(attn_hidden_dim, 1)
         )
-
-        # 特征融合
+        # 特征融合改为作用于整个输入特征
         self.fusion = nn.Sequential(
             nn.Linear(in_channels, in_channels),
             nn.BatchNorm1d(in_channels),
             nn.ReLU()
         )
 
-        print(
-            f"[MMCA] 模块初始化完成 - 输入通道: {in_channels}, 坐标通道: {coord_channels}, 颜色通道: {color_channels}, 法向量通道: {normal_channels}")
-
     def forward(self, x, coords, colors, normals):
-        print(
-            f"[MMCA] 前向传播 - 输入特征形状: {x.shape}, 坐标形状: {coords.shape}, 颜色形状: {colors.shape}, 法向量形状: {normals.shape}")
+        # x: [N, C],  coords/colors/normals: [N, 3]
+        N, C = x.shape
+        print(f"[MMCA] 前向传播 - 输入特征形状: {x.shape}, 坐标/颜色/法向量形状: {coords.shape}")
 
-        # 计算批处理大小
-        batch_size = x.size(0) // coords.size(0) if len(x.shape) == 3 else 1
-        print(f"[MMCA] 批处理大小推断: {batch_size}")
+        # 计算各模态注意力权重（无需批处理repeat，直接对每个点计算）
+        coord_attn = self.coord_mlp(coords).sigmoid()  # [N, 1]
+        color_attn = self.color_mlp(colors).sigmoid()  # [N, 1]
+        normal_attn = self.normal_mlp(normals).sigmoid()  # [N, 1]
 
-        if batch_size > 1:
-            # 处理批处理情况
-            coords = coords.repeat(batch_size, 1)
-            colors = colors.repeat(batch_size, 1)
-            normals = normals.repeat(batch_size, 1)
-            print(f"[MMCA] 模态特征重复后形状 - 坐标: {coords.shape}, 颜色: {colors.shape}, 法向量: {normals.shape}")
+        # 注意力权重形状调整为 [N, 1]，与特征x [N, C] 广播匹配
+        coord_attn = coord_attn  # 无需额外维度
+        color_attn = color_attn
+        normal_attn = normal_attn
 
-        # 计算各模态注意力权重
-        coord_attn = self.coord_mlp(coords).sigmoid()
-        color_attn = self.color_mlp(colors).sigmoid()
-        normal_attn = self.normal_mlp(normals).sigmoid()
+        # 融合注意力权重（而非分离特征）
+        combined_attn = (coord_attn + color_attn + normal_attn) / 3.0  # 简单平均融合
+        enhanced_feat = x * combined_attn  # [N, C] * [N, 1] → [N, C]
 
-        # 注意力权重统计
-        print(
-            f"[MMCA] 坐标注意力 - min: {coord_attn.min():.4f}, max: {coord_attn.max():.4f}, mean: {coord_attn.mean():.4f}")
-        print(
-            f"[MMCA] 颜色注意力 - min: {color_attn.min():.4f}, max: {color_attn.max():.4f}, mean: {color_attn.mean():.4f}")
-        print(
-            f"[MMCA] 法向量注意力 - min: {normal_attn.min():.4f}, max: {normal_attn.max():.4f}, mean: {normal_attn.mean():.4f}")
-
-        # 调整注意力权重形状
-        if len(x.shape) == 3:  # [B, N, C]
-            coord_attn = coord_attn.unsqueeze(0).unsqueeze(-1)
-            color_attn = color_attn.unsqueeze(0).unsqueeze(-1)
-            normal_attn = normal_attn.unsqueeze(0).unsqueeze(-1)
-        else:  # [N, C]
-            coord_attn = coord_attn.unsqueeze(-1)
-            color_attn = color_attn.unsqueeze(-1)
-            normal_attn = normal_attn.unsqueeze(-1)
-        print(
-            f"[MMCA] 调整后注意力形状 - 坐标: {coord_attn.shape}, 颜色: {color_attn.shape}, 法向量: {normal_attn.shape}")
-
-        # 分离并增强各模态特征
-        coord_feat = x[:, :self.coord_channels] * coord_attn
-        color_feat = x[:, self.coord_channels:self.coord_channels + self.color_channels] * color_attn
-        normal_feat = x[:, self.coord_channels + self.color_channels:] * normal_attn
-        print(
-            f"[MMCA] 增强后模态特征形状 - 坐标: {coord_feat.shape}, 颜色: {color_feat.shape}, 法向量: {normal_feat.shape}")
-
-        # 融合特征
-        enhanced_feat = torch.cat([coord_feat, color_feat, normal_feat], dim=-1)
+        # 特征融合与残差连接
         fused_feat = self.fusion(enhanced_feat)
-        print(f"[MMCA] 融合后特征形状: {fused_feat.shape}")
-
         return fused_feat + x  # 残差连接
+
 
 
 # --- 改进的基础模块 ---
