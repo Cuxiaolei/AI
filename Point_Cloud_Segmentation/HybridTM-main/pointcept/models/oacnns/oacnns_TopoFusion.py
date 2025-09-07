@@ -715,6 +715,13 @@ class OACNNs_TopoFusion(nn.Module):
         coords = feat[..., 0:3]  # 前3通道：坐标
         colors = feat[..., 3:6]  # 中间3通道：法向量
         normals = feat[..., 6:9]  # 后3通道：颜色
+        # 计算并备份原始曲率（30000点）
+        if self.use_pl_topoconv and normals is not None and normals.numel() > 0:
+            original_curvature = compute_curvature(
+                normals,
+                k=self.pl_topoconv_kwargs.get('k', 16)
+            )
+            input_dict["original_curvature"] = original_curvature  # 用于损失计算
         # print(f"[Model] 多模态特征 - 坐标: {coords.shape if coords is not None else 'None'}, "
         #       f"颜色: {colors.shape if colors is not None else 'None'}, "
         #       f"法向量: {normals.shape if normals is not None else 'None'}")
@@ -764,11 +771,11 @@ class OACNNs_TopoFusion(nn.Module):
         # print(f"\n[Model] 最终预测形状: {seg_logits.shape}")
 
         # 保存曲率用于损失计算（创新点3: PL-PLE Loss依赖）
-        if curvatures:
-            input_dict["curvatures"] = curvatures[-1]
+        # if curvatures:
+            # input_dict["original_curvature"] = curvatures[-1]
             # print(f"[Model] 曲率已存入input_dict - 形状: {curvatures[-1].shape}")
-        else:
-            print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
+        # else:
+        #     print(f"[Model] 未生成曲率数据 - 可能PL-TopoConv未启用或未正确运行")
 
         print(f"===== OACNNs_TopoFusion 前向传播结束 =====\n")
         return seg_logits
