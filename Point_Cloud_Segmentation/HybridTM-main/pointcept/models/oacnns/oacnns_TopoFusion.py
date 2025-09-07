@@ -741,7 +741,8 @@ class OACNNs_TopoFusion(nn.Module):
         # 编码器传播
         for i in range(self.num_stages):
             print(f"\n[Model] 编码器阶段 {i + 1}/{self.num_stages}")
-            x, curvature = self.enc[i](x, normals, coords, colors)
+            x, curvature, coords, colors, normals = self.enc[i](x, normals, coords, colors)
+            # x, curvature = self.enc[i](x, normals, coords, colors)
             skips.append(x)
             if curvature is not None:
                 curvatures.append(curvature)
