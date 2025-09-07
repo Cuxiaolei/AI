@@ -474,45 +474,49 @@ class DownBlock(OriginalDownBlock):
         # 初始化MMCA模块
         if self.use_mmca:
             self.mmca = MMCAModule(
-                in_channels=in_channels, **(mmca_kwargs or {})
+                in_channels=embed_channels,  # 注意：下采样后通道数已变为embed_channels
+                **(mmca_kwargs or {})
             )
-            print(f"[DownBlock] MMCA已启用 - 输入通道: {in_channels}")
+            print(f"[DownBlock] MMCA已启用 - 输入通道: {embed_channels}")
         else:
             print(f"[DownBlock] MMCA未启用")
 
     def forward(self, x, normals, coords, colors):
-        # 1. 先执行下采样（获取下采样后的特征和索引）
-        # 注意：需要记录下采样保留的点索引（假设下采样操作会返回保留的indices）
-        x, keep_indices = self.down(x, return_indices=True)  # 假设修改down方法返回保留的索引
-        # 若原down方法不支持返回indices，可通过前后特征形状差异推断，或在down模块中添加记录逻辑
+        # 1. 执行下采样（spconv的SparseConv3d不支持return_indices，直接下采样）
+        x = self.down(x)  # 仅返回下采样后的稀疏张量
 
-        # 2. 根据保留的索引筛选多模态特征（确保点数量匹配）
-        # keep_indices: 下采样后保留的点在原始特征中的索引，形状为 [N_new]
-        coords = coords[keep_indices]  # [N_new, 3]
-        colors = colors[keep_indices]  # [N_new, 3]
-        normals = normals[keep_indices]  # [N_new, 3]
-        print(f"[DownBlock] 下采样后 - 特征点数量: {x.features.shape[0]}, 多模态特征点数量: {coords.shape[0]}")
-
-        # 3. 生成聚类（基于下采样后的坐标）
+        # 2. 生成下采样后的体素索引，用于聚合多模态特征（确保数量匹配）
         coord = x.indices[:, 1:].float()  # 下采样后的空间坐标 [N_new, 3]
-        batch = x.indices[:, 0]
+        batch = x.indices[:, 0]  # 批次索引
+        # 使用第一个网格大小生成体素聚类（与编码器配置对齐）
+        grid_size = self.point_grid_size[0] if self.point_grid_size else 0.1
+        cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
+        _, cluster = torch.unique(cluster, return_inverse=True)  # 确保索引连续
+
+        # 3. 对多模态特征进行聚合（与下采样后的特征数量匹配）
+        # 注意：原始coords/colors/normals是下采样前的，需要按体素聚合
+        coords_down = scatter(coords, cluster, reduce="mean")  # [N_new, 3]
+        colors_down = scatter(colors, cluster, reduce="mean")  # [N_new, 3]
+        normals_down = scatter(normals, cluster, reduce="mean")  # [N_new, 3]
+        print(f"[DownBlock] 下采样后 - 特征点数量: {x.features.shape[0]}, 多模态特征点数量: {coords_down.shape[0]}")
+
+        # 4. 应用MMCA（使用聚合后的多模态特征）
+        if self.use_mmca and hasattr(self, 'mmca'):
+            feat = x.features
+            print(f"[DownBlock] 应用MMCA - 特征形状: {feat.shape}, 多模态特征形状: {coords_down.shape}")
+            feat = self.mmca(feat, coords_down, colors_down, normals_down)  # 维度匹配
+            x = x.replace_feature(feat)
+
+        # 5. 生成聚类并处理BasicBlock
         clusters = []
         for grid_size in self.point_grid_size:
             cluster = voxel_grid(pos=coord, size=grid_size, batch=batch)
             _, cluster = torch.unique(cluster, return_inverse=True)
             clusters.append(cluster)
 
-        # 4. 应用MMCA（此时多模态特征已与特征x的点数量匹配）
-        if self.use_mmca and hasattr(self, 'mmca'):
-            feat = x.features
-            print(f"[DownBlock] 应用MMCA - 特征形状: {feat.shape}, 多模态特征形状: {coords.shape}")
-            feat = self.mmca(feat, coords, colors, normals)  # 此时维度匹配
-            x = x.replace_feature(feat)
-
-        # 5. 处理BasicBlock（后续流程不变）
         curvature = None
         for block in self.blocks:
-            x, block_curvature = block(x, clusters, normals=normals)
+            x, block_curvature = block(x, clusters, normals=normals_down)  # 使用下采样后的法向量
             if block_curvature is not None:
                 curvature = block_curvature
         return x, curvature
