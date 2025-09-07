@@ -23,17 +23,17 @@ class PLPLELoss(nn.Module):
         print(f"  curvature_threshold: {curvature_threshold}, pseudo_weight: {pseudo_weight}")
         print(f"  physical_weight: {physical_weight}")
 
-    def forward(self, preds, targets, curvatures=None, **kwargs):
+    def forward(self, preds, targets, original_curvature=None):
         print("\n===== PLCCLoss forward started =====")
         # 打印输入基本信息
         print(f"  preds shape: {preds.shape}, device: {preds.device}")
         print(f"  targets shape: {targets.shape}, device: {targets.device}")
-        print(f"  curvatures exists: {curvatures is not None}")
-        if curvatures is not None:
-            print(f"  curvatures shape: {curvatures.shape}, device: {curvatures.device}")
+        print(f"  curvatures exists: {original_curvature is not None}")
+        if original_curvature is not None:
+            print(f"  curvatures shape: {original_curvature.shape}, device: {original_curvature.device}")
 
         # 如果没有曲率信息，返回0损失（不影响基础损失）
-        if curvatures is None:
+        if original_curvature is None:
             print("  curvatures is None, return 0.0 loss")
             return torch.tensor(0.0, device=preds.device)
 
@@ -55,7 +55,7 @@ class PLPLELoss(nn.Module):
         # 1. 物理先验损失（鼓励低曲率区域预测为电力线）
         print("\n  Calculating physical prior loss...")
         # 仅在有效区域计算
-        valid_curvatures = curvatures[valid_mask]
+        valid_curvatures = original_curvature[valid_mask]
         valid_pl_prob = power_line_prob[valid_mask]
         print(
             f"  valid_curvatures shape: {valid_curvatures.shape}, stats: mean={valid_curvatures.mean().item():.4f}, max={valid_curvatures.max().item():.4f}")
@@ -78,7 +78,7 @@ class PLPLELoss(nn.Module):
         print("\n  Calculating pseudo label loss...")
         # 条件：中等置信度 + 低曲率 + 有效区域
         cond1 = (power_line_prob > self.pseudo_threshold) & (power_line_prob < 1 - self.pseudo_threshold)
-        cond2 = curvatures < self.curvature_threshold
+        cond2 = original_curvature < self.curvature_threshold
         pseudo_mask = cond1 & cond2 & valid_mask
         pseudo_count = pseudo_mask.sum().item()
         print(f"  cond1 (medium confidence) count: {cond1.sum().item()}")
