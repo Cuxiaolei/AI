@@ -24,15 +24,15 @@ model = dict(
         enc_num_ref=[16, 16, 16, 16],
 
         # 创新点1: 拓扑感知图卷积（PL-TopoConv）配置
-        use_pl_topoconv=False,
+        use_pl_topoconv=True,
         pl_topoconv_kwargs=dict(
             k=16,  # KNN邻居数量
-            angle_weight=1.0,  # 法向一致性权重
-            curvature_weight=1.0  # 曲率权重
+            angle_weight=0.5,  # 法向一致性权重
+            curvature_weight=0.7  # 曲率权重
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
-        use_mmca=True,
+        use_mmca=False,
         mmca_kwargs=dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数
@@ -47,9 +47,10 @@ model = dict(
         #     type="PLPLELoss",
         #     ignore_index=-1,
         #     pseudo_threshold=0.6,  # 伪标签置信度阈值
-        #     curvature_threshold=0.1,  # 曲率阈值
-        #     pseudo_weight=0.3,  # 伪标签损失权重
-        #     physical_weight=0.2  # 物理先验权重
+        #     curvature_threshold=0.07,  # 曲率阈值
+        #     pseudo_weight=0,  # 伪标签损失权重
+        #     physical_weight=0.08,  # 物理先验权重
+        #     debug=False
         # )
     ],
 )
@@ -133,7 +134,7 @@ data = dict(
                 return_grid_coord=True,
                 return_min_coord=True,
             ),
-            # dict(type="SphereCrop", point_max=1000000, mode='center'),
+            dict(type="SphereCrop", point_max=10000, mode='random'),
             # dict(type="SphereCrop", point_max=20000, mode="center"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
