@@ -288,64 +288,94 @@ def topo_aware_knn_weight(coords, normals, k=16, angle_weight=1.0, curvature_wei
     return edge_index_full, combined_weight
 
 
-# --- 创新点2: 多模态通道注意力机制（MMCA）实现 ---
+# --- 创新点2: 多模态通道注意力机制（MMCA）实现（优化版）---
 class MMCAModule(nn.Module):
     def __init__(self, in_channels,
                  coord_channels=3,
                  color_channels=3,
                  normal_channels=3,
-                 attn_hidden_dim=16):
+                 attn_hidden_dim=8):  # 调整为更稳健的默认值8
         super().__init__()
         self.in_channels = in_channels
-        # 保持模态特征提取器不变
+        self.attn_hidden_dim = attn_hidden_dim
+
+        # 1. 模态特征提取器（保持原有结构，适配各模态维度）
         self.coord_mlp = nn.Sequential(
             nn.Linear(coord_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(attn_hidden_dim, 1)
+            nn.ReLU(inplace=True),
+            nn.Linear(attn_hidden_dim, 1)  # 输出每个点的坐标模态注意力权重
         )
         self.color_mlp = nn.Sequential(
             nn.Linear(color_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(attn_hidden_dim, 1)
+            nn.ReLU(inplace=True),
+            nn.Linear(attn_hidden_dim, 1)  # 输出每个点的颜色模态注意力权重
         )
         self.normal_mlp = nn.Sequential(
             nn.Linear(normal_channels, attn_hidden_dim),
             nn.BatchNorm1d(attn_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(attn_hidden_dim, 1)
+            nn.ReLU(inplace=True),
+            nn.Linear(attn_hidden_dim, 1)  # 输出每个点的法向量模态注意力权重
         )
-        # 特征融合改为作用于整个输入特征
+
+        # 2. 核心优化：可学习的模态全局权重（针对电力线任务初始化）
+        # 初始权重：坐标(1.5) > 法向量(1.2) > 颜色(0.5)，引导模型优先关注有效模态
+        self.modal_global_weight = nn.Parameter(
+            torch.tensor([1.5, 1.2, 0.5], dtype=torch.float32),
+            requires_grad=True  # 允许训练中调整
+        )
+        self.softmax = nn.Softmax(dim=0)  # 归一化模态权重，确保和为1
+
+        # 3. 特征融合层（保持残差连接逻辑）
         self.fusion = nn.Sequential(
             nn.Linear(in_channels, in_channels),
             nn.BatchNorm1d(in_channels),
-            nn.ReLU()
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x, coords, colors, normals):
-        # x: [N, C],  coords/colors/normals: [N, 3]
-        N, C = x.shape
-        # print(f"[MMCA] 前向传播 - 输入特征形状: {x.shape}, 坐标/颜色/法向量形状: {coords.shape}")
+        """
+        Args:
+            x: 点云特征，形状 [N, C]（N为点数量，C为特征通道数）
+            coords: 坐标模态，形状 [N, 3]
+            colors: 颜色模态，形状 [N, 3]
+            normals: 法向量模态，形状 [N, 3]
+        Returns:
+            注意力增强后的特征，形状 [N, C]
+        """
+        N = x.shape[0]  # 获取当前批次的点数量
 
-        # 计算各模态注意力权重（无需批处理repeat，直接对每个点计算）
-        coord_attn = self.coord_mlp(coords).sigmoid()  # [N, 1]
-        color_attn = self.color_mlp(colors).sigmoid()  # [N, 1]
-        normal_attn = self.normal_mlp(normals).sigmoid()  # [N, 1]
+        # 4. 关键优化：模态特征标准化（统一尺度，避免数值偏差）
+        # 坐标标准化（batch内逐通道标准化）
+        coords = (coords - coords.mean(dim=0, keepdim=True)) / (coords.std(dim=0, keepdim=True) + 1e-6)
+        # 颜色标准化（解决光照导致的数值波动）
+        colors = (colors - colors.mean(dim=0, keepdim=True)) / (colors.std(dim=0, keepdim=True) + 1e-6)
+        # 法向量单位化（确保几何特征一致性）
+        normals = F.normalize(normals, dim=1, eps=1e-6)
 
-        # 注意力权重形状调整为 [N, 1]，与特征x [N, C] 广播匹配
-        coord_attn = coord_attn  # 无需额外维度
-        color_attn = color_attn
-        normal_attn = normal_attn
+        # 5. 计算每个点的模态注意力权重（点级权重）
+        # 注意：需用view(N, 1)确保广播维度匹配
+        coord_attn = self.coord_mlp(coords).sigmoid().view(N, 1)  # [N, 1]
+        color_attn = self.color_mlp(colors).sigmoid().view(N, 1)  # [N, 1]
+        normal_attn = self.normal_mlp(normals).sigmoid().view(N, 1)  # [N, 1]
 
-        # 融合注意力权重（而非分离特征）
-        combined_attn = (coord_attn + color_attn + normal_attn) / 3.0  # 简单平均融合
-        enhanced_feat = x * combined_attn  # [N, C] * [N, 1] → [N, C]
+        # 6. 融合点级注意力与全局模态权重（双重约束）
+        # 全局模态权重归一化（确保训练中权重合理分配）
+        normalized_global_weight = self.softmax(self.modal_global_weight)  # [3]
+        # 加权融合：全局权重控制模态重要性，点级权重控制局部有效性
+        combined_attn = (
+            normalized_global_weight[0] * coord_attn +  # 坐标模态贡献
+            normalized_global_weight[1] * color_attn +  # 法向量模态贡献
+            normalized_global_weight[2] * normal_attn   # 颜色模态贡献（默认权重最低）
+        )
 
-        # 特征融合与残差连接
-        fused_feat = self.fusion(enhanced_feat)
-        return fused_feat + x  # 残差连接
+        # 7. 注意力增强特征 + 残差连接（避免特征退化）
+        enhanced_feat = x * combined_attn  # 注意力加权特征
+        fused_feat = self.fusion(enhanced_feat)  # 特征细化
+        final_feat = fused_feat + x  # 残差连接，保留原始特征信息
 
+        return final_feat
 
 
 # --- 改进的基础模块 ---
