@@ -12,12 +12,15 @@ echo "执行第二个训练任务: semseg-oacnns-TopoFusion-A"
 
 # 第三个训练任务
 echo "执行第三个训练任务: semseg-oacnns-TopoFusion-B"
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacnns-TopoFusion-B
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacnns-TopoFusion-B-attn_hidden_dim16
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacnns-TopoFusion-B-attn_hidden_dim8
 
 sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A -n semseg-oacnns-TopoFusion-A
 # 第四个训练任务
 #echo "执行第四个训练任务: semseg-oacnns-TopoFusion-C"
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C -n semseg-oacnns-TopoFusion-C
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C -n semseg-oacnns-TopoFusion-C-physical_weight0.3
 
 ## 第五个训练任务
 #echo "执行第五个训练任务: semseg-oacnns-TopoFusion-AB"
