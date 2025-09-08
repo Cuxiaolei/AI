@@ -24,7 +24,7 @@ model = dict(
         enc_num_ref=[16, 16, 16, 16],
 
         # 创新点1: 拓扑感知图卷积（PL-TopoConv）配置
-        use_pl_topoconv=True,
+        use_pl_topoconv=False,
         pl_topoconv_kwargs=dict(
             k=16,  # KNN邻居数量
             angle_weight=0.5,  # 法向一致性权重
@@ -37,21 +37,21 @@ model = dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数
             normal_channels=3,  # 法向量通道数
-            attn_hidden_dim=16  # 注意力隐藏层维度
+            attn_hidden_dim=12  # 注意力隐藏层维度
         ),
 
     ),
     criteria=[
         dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
-        dict(
-            type="PLPLELoss",
-            ignore_index=-1,
-            pseudo_threshold=0.6,  # 伪标签置信度阈值
-            curvature_threshold=0.07,  # 曲率阈值
-            pseudo_weight=0.3,  # 伪标签损失权重
-            physical_weight=0.08,  # 物理先验权重
-            debug=False
-        )
+        # dict(
+        #     type="PLPLELoss",
+        #     ignore_index=-1,
+        #     pseudo_threshold=0.6,  # 伪标签置信度阈值
+        #     curvature_threshold=0.07,  # 曲率阈值
+        #     pseudo_weight=0,  # 伪标签损失权重
+        #     physical_weight=0.08,  # 物理先验权重
+        #     debug=False
+        # )
     ],
 )
 
