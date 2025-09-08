@@ -37,7 +37,7 @@ model = dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数
             normal_channels=3,  # 法向量通道数
-            attn_hidden_dim=16  # 注意力隐藏层维度
+            attn_hidden_dim=8  # 注意力隐藏层维度
         ),
 
     ),
