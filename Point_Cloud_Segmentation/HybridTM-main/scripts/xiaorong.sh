@@ -17,7 +17,7 @@ sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacn
 sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A -n semseg-oacnns-TopoFusion-A
 # 第四个训练任务
 #echo "执行第四个训练任务: semseg-oacnns-TopoFusion-C"
-#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C -n semseg-oacnns-TopoFusion-C
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C -n semseg-oacnns-TopoFusion-C
 
 ## 第五个训练任务
 #echo "执行第五个训练任务: semseg-oacnns-TopoFusion-AB"
