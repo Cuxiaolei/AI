@@ -7,20 +7,51 @@ echo "开始执行训练任务..."
 #echo "执行第一个训练任务: semseg-oacnns-TopoFusion-ABC"
 #sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-ABC -n semseg-oacnns-TopoFusion-ABC
 
-# 第二个训练任务
-echo "执行第二个训练任务: semseg-oacnns-TopoFusion-A"
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight0.6 -n semseg-oacnns-TopoFusion-A-angle_weight0.6
 
-# 第三个训练任务
-echo "执行第三个训练任务: semseg-oacnns-TopoFusion-B"
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight0.8 -n semseg-oacnns-TopoFusion-A-angle_weight0.8
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacnns-TopoFusion-B-attn_hidden_dim16
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight1.0 -n semseg-oacnns-TopoFusion-A-angle_weight1.0
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B -n semseg-oacnns-TopoFusion-B-attn_hidden_dim8
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight1.2 -n semseg-oacnns-TopoFusion-A-angle_weight1.2
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A -n semseg-oacnns-TopoFusion-A
-# 第四个训练任务
-#echo "执行第四个训练任务: semseg-oacnns-TopoFusion-C"
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C -n semseg-oacnns-TopoFusion-C-physical_weight0.3
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight1.4 -n semseg-oacnns-TopoFusion-A-angle_weight1.4
+
+
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim4 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim4
+
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim8 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim8
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim10 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim10
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim12 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim12
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim14 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim14
+
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim16 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim16
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim20 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim20
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-B-attn_hidden_dim24 -n semseg-oacnns-TopoFusion-B-attn_hidden_dim24
+
+
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.04 -n semseg-oacnns-TopoFusion-C-physical_weight0.04
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.08 -n semseg-oacnns-TopoFusion-C-physical_weight0.08
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.12 -n semseg-oacnns-TopoFusion-C-physical_weight0.12
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.16 -n semseg-oacnns-TopoFusion-C-physical_weight0.16
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.20 -n semseg-oacnns-TopoFusion-C-physical_weight0.20
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.24 -n semseg-oacnns-TopoFusion-C-physical_weight0.24
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.28 -n semseg-oacnns-TopoFusion-C-physical_weight0.26
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.32 -n semseg-oacnns-TopoFusion-C-physical_weight0.32
 
 ## 第五个训练任务
 #echo "执行第五个训练任务: semseg-oacnns-TopoFusion-AB"

@@ -32,26 +32,26 @@ model = dict(
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
-        use_mmca=False,
+        use_mmca=True,
         mmca_kwargs=dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数
             normal_channels=3,  # 法向量通道数
-            attn_hidden_dim=16  # 注意力隐藏层维度
+            attn_hidden_dim=24  # 注意力隐藏层维度
         ),
 
     ),
     criteria=[
         dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
-        dict(
-            type="PLPLELoss",
-            ignore_index=-1,
-            pseudo_threshold=0.6,  # 伪标签置信度阈值
-            curvature_threshold=0.07,  # 曲率阈值
-            pseudo_weight=0.3,  # 伪标签损失权重
-            physical_weight=0.08,  # 物理先验权重
-            debug=False
-        )
+        # dict(
+        #     type="PLPLELoss",
+        #     ignore_index=-1,
+        #     pseudo_threshold=0.6,  # 伪标签置信度阈值
+        #     curvature_threshold=0.07,  # 曲率阈值
+        #     pseudo_weight=0,  # 伪标签损失权重
+        #     physical_weight=0.08,  # 物理先验权重
+        #     debug=False
+        # )
     ],
 )
 
