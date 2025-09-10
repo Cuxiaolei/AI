@@ -4,8 +4,16 @@
 echo "开始执行训练任务..."
 
 ## 第一个训练任务
-#echo "执行第一个训练任务: semseg-oacnns-TopoFusion-ABC"
-#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-ABC -n semseg-oacnns-TopoFusion-ABC
+echo "执行第一个训练任务: semseg-oacnns-TopoFusion-ABC"
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-ABC -n semseg-oacnns-TopoFusion-ABC
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-AB -n semseg-oacnns-TopoFusion-AB
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-AC -n semseg-oacnns-TopoFusion-AC
+
+sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-BC -n semseg-oacnns-TopoFusion-BC
+
+
 
 #sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-A-angle_weight0.6 -n semseg-oacnns-TopoFusion-A-angle_weight0.6
 #
@@ -55,13 +63,13 @@ echo "开始执行训练任务..."
 
 
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.36 -n semseg-oacnns-TopoFusion-C-physical_weight0.36
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.36 -n semseg-oacnns-TopoFusion-C-physical_weight0.36
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.40 -n semseg-oacnns-TopoFusion-C-physical_weight0.40
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.40 -n semseg-oacnns-TopoFusion-C-physical_weight0.40
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.44 -n semseg-oacnns-TopoFusion-C-physical_weight0.44
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.44 -n semseg-oacnns-TopoFusion-C-physical_weight0.44
 
-sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.48 -n semseg-oacnns-TopoFusion-C-physical_weight0.48
+#sh scripts/train.sh -g 1 -d scannet -c semseg-oacnns-TopoFusion-C-physical_weight0.48 -n semseg-oacnns-TopoFusion-C-physical_weight0.48
 
 ## 第五个训练任务
 #echo "执行第五个训练任务: semseg-oacnns-TopoFusion-AB"

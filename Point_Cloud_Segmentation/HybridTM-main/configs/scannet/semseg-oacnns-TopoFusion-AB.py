@@ -43,15 +43,15 @@ model = dict(
     ),
     criteria=[
         dict(type="CrossEntropyLoss", loss_weight=1.0, ignore_index=-1),
-        dict(
-            type="PLPLELoss",
-            ignore_index=-1,
-            pseudo_threshold=0.6,  # 伪标签置信度阈值
-            curvature_threshold=0.07,  # 曲率阈值
-            pseudo_weight=0.3,  # 伪标签损失权重
-            physical_weight=0.32,  # 物理先验权重
-            debug=False
-        )
+        # dict(
+        #     type="PLPLELoss",
+        #     ignore_index=-1,
+        #     pseudo_threshold=0.6,  # 伪标签置信度阈值
+        #     curvature_threshold=0.07,  # 曲率阈值
+        #     pseudo_weight=0.3,  # 伪标签损失权重
+        #     physical_weight=0.32,  # 物理先验权重
+        #     debug=False
+        # )
     ],
 )
 

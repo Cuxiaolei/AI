@@ -32,7 +32,7 @@ model = dict(
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
-        use_mmca=True,
+        use_mmca=False,
         mmca_kwargs=dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数

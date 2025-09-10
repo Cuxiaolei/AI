@@ -24,20 +24,20 @@ model = dict(
         enc_num_ref=[16, 16, 16, 16],
 
         # 创新点1: 拓扑感知图卷积（PL-TopoConv）配置
-        use_pl_topoconv=True,
+        use_pl_topoconv=False,
         pl_topoconv_kwargs=dict(
             k=16,  # KNN邻居数量
-            angle_weight=0.8,  # 法向一致性权重
-            curvature_weight=1.0  # 曲率权重
+            angle_weight=0.5,  # 法向一致性权重
+            curvature_weight=0.7  # 曲率权重
         ),
 
         # 创新点2: 多模态通道注意力机制（MMCA）配置
-        use_mmca=True,
+        use_mmca=False,
         mmca_kwargs=dict(
             coord_channels=3,  # 坐标通道数
             color_channels=3,  # 颜色通道数
             normal_channels=3,  # 法向量通道数
-            attn_hidden_dim=10  # 注意力隐藏层维度
+            attn_hidden_dim=16  # 注意力隐藏层维度
         ),
 
     ),
