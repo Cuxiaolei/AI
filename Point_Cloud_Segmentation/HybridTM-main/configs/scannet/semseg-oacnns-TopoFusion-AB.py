@@ -167,7 +167,7 @@ data = dict(
             ),
             crop=None,
             post_transform=[
-                dict(type="SphereCrop", point_max=10000, mode="center"),
+                # dict(type="SphereCrop", point_max=10000, mode="center"),
                 dict(type="CenterShift", apply_z=False),
                 dict(type="ToTensor"),
                 dict(
