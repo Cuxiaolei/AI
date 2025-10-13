@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 import os
 from datetime import datetime
 
@@ -25,8 +25,8 @@ plt.rcParams['savefig.pad_inches'] = 0.1
 
 
 def plot_miou_curve(models_data, num_epochs=100, save_path=None,
-                    title="mIoU Convergence Curves"):
-    """绘制mIoU曲线（确保图例完整显示）"""
+                    title="mIoU Convergence Curves", is_zoom=False):
+    """绘制mIoU曲线（支持原图和放大图）"""
     # 增大图表尺寸，特别是宽度和高度
     plt.figure(figsize=(10, 7))
     ax = plt.gca()
@@ -38,37 +38,72 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     ]
 
     epochs = np.arange(1, num_epochs + 1)
+    # 处理放大图数据范围
+    if is_zoom:
+        end_idx = min(100, len(epochs))
+        plot_epochs = epochs[69:end_idx]  # 70-100 epoch（索引69到99）
+    else:
+        plot_epochs = epochs
 
     # 遍历模型绘制曲线
     for i, (model_name, metrics) in enumerate(models_data.items()):
         color = colors[i % len(colors)]
+        metric_data = metrics['miou'] * 100  # 转为百分比
+
+        # 处理放大图数据
+        if is_zoom:
+            end_idx = min(100, len(metric_data))
+            plot_data = metric_data[69:end_idx]
+        else:
+            plot_data = metric_data
 
         # 第5个(索引4)和第8个(索引7)颜色加重，其他变浅色
         if i == 4 or i == 7:
             # 加重：更粗的线条和不透明
-            plt.plot(epochs, metrics['miou'] * 100, label=model_name,
+            plt.plot(plot_epochs, plot_data, label=model_name,
                      color=color, linestyle='-', linewidth=1.5, alpha=1.0)
         else:
             # 浅色：较细的线条和半透明
-            plt.plot(epochs, metrics['miou'] * 100, label=model_name,
+            plt.plot(plot_epochs, plot_data, label=model_name,
                      color=color, linestyle='-', linewidth=1.0, alpha=0.8)
 
     # 设置图表属性
     plt.title(title)
     plt.xlabel('Epochs')
     plt.ylabel('mIoU (%)')
-    plt.xlim(0, num_epochs)
-    plt.ylim(0, 100)
 
-    # 设置刻度
-    ax.xaxis.set_major_locator(MultipleLocator(10))
-    ax.xaxis.set_minor_locator(MultipleLocator(5))
-    ax.yaxis.set_major_locator(MultipleLocator(10))
-    ax.yaxis.set_minor_locator(MultipleLocator(5))
+    # 设置坐标轴范围和刻度
+    if is_zoom:
+        # 放大图：x为70-100，y为94-100
+        plt.xlim(70, min(100, num_epochs))
+        plt.ylim(90, 100)
+
+        # X轴刻度设置：间隔5，半刻度2.5
+        ax.xaxis.set_major_locator(MultipleLocator(5))
+        ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+        ax.xaxis.set_minor_formatter(plt.NullFormatter())
+
+        # Y轴刻度设置：间隔1，半刻度0.5
+        ax.yaxis.set_major_locator(MultipleLocator(1))
+        ax.yaxis.set_minor_locator(MultipleLocator(0.5))
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%d'))
+        ax.yaxis.set_minor_formatter(plt.NullFormatter())
+    else:
+        plt.xlim(0, num_epochs)
+        plt.ylim(0, 100)
+
+        # 设置刻度
+        ax.xaxis.set_major_locator(MultipleLocator(10))
+        ax.xaxis.set_minor_locator(MultipleLocator(5))
+        ax.yaxis.set_major_locator(MultipleLocator(10))
+        ax.yaxis.set_minor_locator(MultipleLocator(5))
 
     # 仅保留左下坐标轴
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1.2)
+    ax.spines['bottom'].set_linewidth(1.2)
 
     plt.grid(False)
 
@@ -87,7 +122,8 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
     # 保存图片时确保包含完整图例
     if save_path:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        file_name = f"miou_{timestamp}.png"
+        zoom_suffix = "_zoom" if is_zoom else ""
+        file_name = f"miou_{timestamp}{zoom_suffix}.png"
         full_path = os.path.join(save_path, file_name)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         plt.savefig(
@@ -103,8 +139,8 @@ def plot_miou_curve(models_data, num_epochs=100, save_path=None,
 
 
 def plot_oa_curve(models_data, num_epochs=100, save_path=None,
-                  title=""):
-    """绘制OA曲线（确保图例完整显示）"""
+                  title="", is_zoom=False):
+    """绘制OA曲线（支持原图和放大图）"""
     # 增大图表尺寸
     plt.figure(figsize=(10, 8))
     ax = plt.gca()
@@ -116,37 +152,72 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
     ]
 
     epochs = np.arange(1, num_epochs + 1)
+    # 处理放大图数据范围
+    if is_zoom:
+        end_idx = min(100, len(epochs))
+        plot_epochs = epochs[69:end_idx]  # 70-100 epoch（索引69到99）
+    else:
+        plot_epochs = epochs
 
     # 遍历模型绘制曲线
     for i, (model_name, metrics) in enumerate(models_data.items()):
         color = colors[i % len(colors)]
+        metric_data = metrics['oa'] * 100  # 转为百分比
+
+        # 处理放大图数据
+        if is_zoom:
+            end_idx = min(100, len(metric_data))
+            plot_data = metric_data[69:end_idx]
+        else:
+            plot_data = metric_data
 
         # 第5个(索引4)和第8个(索引7)颜色加重，其他变浅色
         if i == 4 or i == 7:
             # 加重：更粗的线条和不透明
-            plt.plot(epochs, metrics['oa'] * 100, label=model_name,
+            plt.plot(plot_epochs, plot_data, label=model_name,
                      color=color, linestyle='-', linewidth=1.5, alpha=1.0)
         else:
             # 浅色：较细的线条和半透明
-            plt.plot(epochs, metrics['oa'] * 100, label=model_name,
+            plt.plot(plot_epochs, plot_data, label=model_name,
                      color=color, linestyle='-', linewidth=1.0, alpha=0.8)
 
     # 设置图表属性
     plt.title(title)
     plt.xlabel('Epochs')
     plt.ylabel('OA (%)')
-    plt.xlim(0, num_epochs)
-    plt.ylim(0, 100)
 
-    # 设置刻度
-    ax.xaxis.set_major_locator(MultipleLocator(10))
-    ax.xaxis.set_minor_locator(MultipleLocator(5))
-    ax.yaxis.set_major_locator(MultipleLocator(10))
-    ax.yaxis.set_minor_locator(MultipleLocator(5))
+    # 设置坐标轴范围和刻度
+    if is_zoom:
+        # 放大图：x为70-100，y为94-100
+        plt.xlim(70, min(100, num_epochs))
+        plt.ylim(94, 100)
+
+        # X轴刻度设置：间隔5，半刻度2.5
+        ax.xaxis.set_major_locator(MultipleLocator(5))
+        ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%d'))
+        ax.xaxis.set_minor_formatter(plt.NullFormatter())
+
+        # Y轴刻度设置：间隔1，半刻度0.5
+        ax.yaxis.set_major_locator(MultipleLocator(1))
+        ax.yaxis.set_minor_locator(MultipleLocator(0.5))
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%d'))
+        ax.yaxis.set_minor_formatter(plt.NullFormatter())
+    else:
+        plt.xlim(0, num_epochs)
+        plt.ylim(0, 100)
+
+        # 设置刻度
+        ax.xaxis.set_major_locator(MultipleLocator(10))
+        ax.xaxis.set_minor_locator(MultipleLocator(5))
+        ax.yaxis.set_major_locator(MultipleLocator(10))
+        ax.yaxis.set_minor_locator(MultipleLocator(5))
 
     # 仅保留左下坐标轴
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1.2)
+    ax.spines['bottom'].set_linewidth(1.2)
 
     plt.grid(False)
 
@@ -165,7 +236,8 @@ def plot_oa_curve(models_data, num_epochs=100, save_path=None,
     # 保存图片
     if save_path:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        file_name = f"oa_{timestamp}.png"
+        zoom_suffix = "_zoom" if is_zoom else ""
+        file_name = f"oa_{timestamp}{zoom_suffix}.png"
         full_path = os.path.join(save_path, file_name)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         plt.savefig(
@@ -215,19 +287,39 @@ def main():
     csv_path = r"D:\桌面1\训练结果\scannet\对比实验\train_metrics.csv"  # 替换为你的CSV路径
     models_data, num_epochs = load_data_from_csv(csv_path)
 
-    # 绘制图表
+    # 绘制图表（原图+放大图）
+    # mIoU原图
     plot_miou_curve(
         models_data,
         num_epochs,
-        save_path="../z_picture/",
+        save_path=r"D:\桌面1\训练结果\scannet\对比实验",
         title=""
     )
-
-    plot_oa_curve(
+    # mIoU放大图
+    plot_miou_curve(
         models_data,
         num_epochs,
-        save_path="../z_picture/",
-        title=""
+        save_path=r"D:\桌面1\训练结果\scannet\对比实验",
+        title="",
+        is_zoom=True
     )
+
+    # # OA原图
+    # plot_oa_curve(
+    #     models_data,
+    #     num_epochs,
+    #     save_path="../z_picture/",
+    #     title=""
+    # )
+    # # OA放大图
+    # plot_oa_curve(
+    #     models_data,
+    #     num_epochs,
+    #     save_path="../z_picture/",
+    #     title="",
+    #     is_zoom=True
+    # )
+
+
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 from pathlib import Path
 
 # 设置中文字体，确保中文正常显示
@@ -19,7 +20,7 @@ def get_unique_filename(directory, base_name, suffix):
 
 
 def plot_sensitivity_analysis(csv_file_path):
-    """绘制无顶部/右侧边框且无背景虚线的参数敏感性分析图"""
+    """绘制参数敏感性分析图，减小图表宽度使整体更紧凑"""
     try:
         # 1. 解析CSV文件路径
         csv_path = Path(csv_file_path)
@@ -31,49 +32,134 @@ def plot_sensitivity_analysis(csv_file_path):
         # 2. 读取并校验数据
         df = pd.read_csv(csv_file_path)
         required_columns = ['angle_weight', 'Class_0_IOU(class_0)',
-                           'Class_1_IOU(class_1)', 'Class_2_IOU(class_2)',
-                           'Scene_mIoU']
+                            'Class_1_IOU(class_1)', 'Class_2_IOU(class_2)',
+                            'Scene_mIoU', 'Class_0_ACC(class_0)',
+                            'Class_1_ACC(class_1)', 'Class_2_ACC(class_2)',
+                            'Scene_OA']
         missing_cols = [col for col in required_columns if col not in df.columns]
         if missing_cols:
             raise ValueError(f"CSV缺少必要列：{', '.join(missing_cols)}")
 
-        # 3. 创建图表与轴
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # 定义类别样式
+        class_styles = {
+            'Class_0': ('#1f77b4', 'o', 'Tower'),  # 蓝色, 圆形
+            'Class_1': ('#ff7f0e', 's', 'Background'),  # 橙色, 正方形
+            'Class_2': ('#2ca02c', '^', 'Conductor'),  # 绿色, 三角形
+        }
+        # 总体指标使用红色
+        overall_color = '#ff0000'  # 红色用于mIoU和Overall Accuracy
+        overall_marker = 'D'  # 菱形标记用于总体指标
+
+        # 3. 绘制IOU图表 - 减小宽度到8
+        fig_iou, ax_iou = plt.subplots(figsize=(8, 7))  # 宽度从10减小到8
 
         # 隐藏顶部和右侧边框及刻度
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.tick_params(top=False, right=False)
-        ax.spines['left'].set_linewidth(1.2)
-        ax.spines['bottom'].set_linewidth(1.2)
+        ax_iou.spines['top'].set_visible(False)
+        ax_iou.spines['right'].set_visible(False)
+        ax_iou.tick_params(top=False, right=False)
+        ax_iou.spines['left'].set_linewidth(1.2)
+        ax_iou.spines['bottom'].set_linewidth(1.2)
 
-        # 4. 绘制折线
-        ax.plot(df['angle_weight'], df['Class_0_IOU(class_0)'],
-                marker='o', color='#1f77b4', label='Tower IOU', linewidth=2, markersize=6, linestyle='--')
-        ax.plot(df['angle_weight'], df['Class_1_IOU(class_1)'],
-                marker='s', color='#ff7f0e', label='Background IOU', linewidth=2, markersize=6, linestyle='--')
-        ax.plot(df['angle_weight'], df['Class_2_IOU(class_2)'],
-                marker='^', color='#2ca02c', label='Conductor IOU', linewidth=2, markersize=6, linestyle='--')
-        ax.plot(df['angle_weight'], df['Scene_mIoU'],
-                marker='D', color='#ff0000', label='mIoU', linewidth=2, markersize=6)
+        # 横坐标设置（保持0.5-1.5范围，0.2间隔显示刻度）
+        ax_iou.set_xticks(np.arange(0.5, 1.6, 0.1))
+        ax_iou.set_xlim(0.5, 1.5)
+        # 调整刻度标签字体大小，避免拥挤
+        ax_iou.tick_params(axis='x', labelsize=10)
 
-        # 5. 坐标轴设置
-        y_max = df[required_columns[1:]].max().max()
-        ax.set_ylim(0.8, y_max + 0.01)
-        ax.set_xlim(df['angle_weight'].min() - 0.05, df['angle_weight'].max() + 0.05)
+        # 绘制IOU折线
+        ax_iou.plot(df['angle_weight'], df['Class_0_IOU(class_0)'],
+                    marker=class_styles['Class_0'][1], color=class_styles['Class_0'][0],
+                    label=f'{class_styles["Class_0"][2]} IOU', linewidth=2, markersize=6,
+                    linestyle='--')
 
-        # 6. 图表标签与美化（已移除网格线）
-        ax.set_xlabel('angle_weight', fontsize=12, fontweight='bold')
-        ax.set_ylabel('IOU Value', fontsize=12, fontweight='bold')
-        ax.set_title('', fontsize=14, fontweight='bold')
-        ax.legend(fontsize=10, loc='lower right', frameon=False)  # 图例无边框
+        ax_iou.plot(df['angle_weight'], df['Class_1_IOU(class_1)'],
+                    marker=class_styles['Class_1'][1], color=class_styles['Class_1'][0],
+                    label=f'{class_styles["Class_1"][2]} IOU', linewidth=2, markersize=6,
+                    linestyle='--')
 
-        # 7. 保存图片
-        unique_img_path = get_unique_filename(csv_directory, "sensitivity_analysis", ".png")
+        ax_iou.plot(df['angle_weight'], df['Class_2_IOU(class_2)'],
+                    marker=class_styles['Class_2'][1], color=class_styles['Class_2'][0],
+                    label=f'{class_styles["Class_2"][2]} IOU', linewidth=2, markersize=6,
+                    linestyle='--')
+
+        ax_iou.plot(df['angle_weight'], df['Scene_mIoU'],
+                    marker=overall_marker, color=overall_color,
+                    label='mIoU', linewidth=2, markersize=6,
+                    linestyle='-')
+
+        # IOU坐标轴设置
+        iou_columns = ['Class_0_IOU(class_0)', 'Class_1_IOU(class_1)',
+                       'Class_2_IOU(class_2)', 'Scene_mIoU']
+        y_max_iou = df[iou_columns].max().max()
+        ax_iou.set_ylim(0.85, y_max_iou + 0.01)
+
+        # IOU图表标签与美化
+        ax_iou.set_xlabel('α', fontsize=14, fontweight='bold')
+        ax_iou.set_ylabel('IOU', fontsize=12, fontweight='bold')
+        ax_iou.legend(fontsize=10, loc='lower right', frameon=False)
+
+        # 保存IOU图片
+        iou_img_path = get_unique_filename(csv_directory, "sensitivity_analysis_iou", ".png")
         plt.tight_layout()
-        plt.savefig(unique_img_path, dpi=300, bbox_inches='tight', facecolor='white')
+        fig_iou.savefig(iou_img_path, dpi=300, bbox_inches='tight', facecolor='white')
+
+        # 4. 绘制ACC图表 - 减小宽度到8
+        fig_acc, ax_acc = plt.subplots(figsize=(8, 7))  # 宽度从10减小到8
+
+        # 隐藏顶部和右侧边框及刻度
+        ax_acc.spines['top'].set_visible(False)
+        ax_acc.spines['right'].set_visible(False)
+        ax_acc.tick_params(top=False, right=False)
+        ax_acc.spines['left'].set_linewidth(1.2)
+        ax_acc.spines['bottom'].set_linewidth(1.2)
+
+        # 横坐标设置
+        ax_acc.set_xticks(np.arange(0.5, 1.6, 0.1))
+        ax_acc.set_xlim(0.5, 1.5)
+        # 调整刻度标签字体大小
+        ax_acc.tick_params(axis='x', labelsize=10)
+
+        # 绘制ACC折线
+        ax_acc.plot(df['angle_weight'], df['Class_0_ACC(class_0)'] * 100,
+                    marker=class_styles['Class_0'][1], color=class_styles['Class_0'][0],
+                    label=f'{class_styles["Class_0"][2]} ACC', linewidth=2, markersize=6,
+                    linestyle='--')
+
+        ax_acc.plot(df['angle_weight'], df['Class_1_ACC(class_1)'] * 100,
+                    marker=class_styles['Class_1'][1], color=class_styles['Class_1'][0],
+                    label=f'{class_styles["Class_1"][2]} ACC', linewidth=2, markersize=6,
+                    linestyle='--')
+
+        ax_acc.plot(df['angle_weight'], df['Class_2_ACC(class_2)'] * 100,
+                    marker=class_styles['Class_2'][1], color=class_styles['Class_2'][0],
+                    label=f'{class_styles["Class_2"][2]} ACC', linewidth=2, markersize=6,
+                    linestyle='--')
+
+        ax_acc.plot(df['angle_weight'], df['Scene_OA'] * 100,
+                    marker=overall_marker, color=overall_color,
+                    label='Overall Accuracy', linewidth=2, markersize=6,
+                    linestyle='-')
+
+        # ACC坐标轴设置
+        acc_columns = ['Class_0_ACC(class_0)', 'Class_1_ACC(class_1)',
+                       'Class_2_ACC(class_2)', 'Scene_OA']
+        y_max_acc = df[acc_columns].max().max() * 100
+        ax_acc.set_ylim(90, y_max_acc + 0.5)
+
+        # ACC图表标签与美化
+        ax_acc.set_xlabel('α', fontsize=14, fontweight='bold')
+        ax_acc.set_ylabel('Accuracy (%)', fontsize=12, fontweight='bold')
+        ax_acc.legend(fontsize=10, loc='lower right', frameon=False)
+
+        # 保存ACC图片
+        acc_img_path = get_unique_filename(csv_directory, "sensitivity_analysis_acc", ".png")
+        plt.tight_layout()
+        fig_acc.savefig(acc_img_path, dpi=300, bbox_inches='tight', facecolor='white')
+
+        # 输出结果信息
         print(f"✅ CSV文件：{csv_filename}（目录：{csv_directory}）")
-        print(f"✅ 无网格图表已保存为：{unique_img_path}")
+        print(f"✅ IOU图表已保存为：{iou_img_path}")
+        print(f"✅ ACC图表已保存为：{acc_img_path}")
 
         # 显示图表
         plt.show()
