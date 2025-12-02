@@ -1,0 +1,118 @@
+# 设置nomachine分辨率
+# 鼠标移到右上角进入nomachine设置
+# DisPlay--->Change Setting--->Use custom resolution勾上并设置分辨率
+
+# 注意如果使用除本地外以往的动作组，需要用/home/ubuntu/software/ainex_controller/ActionGroups/change_to_new_action.py转换一下
+
+# led已被占用，要使用，请修改hw_wifi.py, rgb和按键已被自启程序占用，要使用请修改app_node.py
+
+# 以下指令请结合说明资料使用
+
+# 关闭后台自启功能
+sudo systemctl disable start_app_node.service 
+
+# 停止后台自启功能
+sudo systemctl stop start_app_node.service
+
+# 使后台自启开机后生效
+sudo systemctl enable start_app_node.service
+
+# 开启后台
+sudo systemctl start start_app_node.service
+
+# 重启后台
+sudo systemctl restart start_app_node.service
+
+# 查看后台自启状态
+sudo systemctl status start_app_node.service
+
+# 扩展板使用示例
+roscd ainex_tutorial/scripts/board/
+
+# 舵机使用示例
+roscd ainex_tutorial/scripts/serial_servo
+
+# 步态使用示例
+roscd ainex_tutorial/scripts/gait_control
+
+# imu校准
+roslaunch ainex_calibration imu_calibration.launch
+# 查看imu校准结果
+roslaunch ainex_peripherals imu_calib.launch
+
+# 摄像头校准
+roslaunch ainex_calibration camera_calibration.launch
+
+# apriltag检测
+roslaunch ainex_example apriltag_detection_node.launch
+
+# apriltag追踪
+roslaunch ainex_example apriltag_track_node.launch
+
+# 自主搬运
+roslaunch ainex_example autonomous_transport_node.launch
+
+# 上台阶
+roslaunch ainex_example climb_stairs_node.launch state:=climb_stairs
+
+# 下台阶
+roslaunch ainex_example climb_stairs_node.launch state:=declimb_stairs
+
+# 上下台阶+巡线
+roslaunch ainex_example climb_stairs_with_visual_patrol_node.launch
+
+# 颜色检测示例
+python3 /home/ubuntu/ros_ws/src/ainex_example/scripts/color_detection/color_detection.py
+
+# 颜色分拣
+roslaunch ainex_example color_sorting_node.launch
+
+# 颜色追踪示例
+roslaunch ainex_example color_track_node.launch 
+# roslaunch ainex_example color_track_node.launch color:=red
+
+# 上下台阶+跨栏+巡线
+roslaunch ainex_example combination_node.launch
+
+# 低空穿越
+roslaunch ainex_example crawl_under_node.launch
+
+# 十字路口检测
+roslaunch ainex_example cross_detect_node.launch
+
+# 人脸检测
+roslaunch ainex_example face_detect_node.launch
+
+# 人脸追踪
+roslaunch ainex_example face_track_node.launch
+
+# 跌倒起立
+roscd ainex_example/scripts/fall_rise && sudo ./start.sh
+
+# 手势控制
+roslaunch ainex_example hand_gesture_control_node.launch
+
+# 指尖轨迹
+roslaunch ainex_example hand_trajectory_detection_node.launch
+
+# 跨栏
+roslaunch ainex_example hurdles_node.launch
+# 跨栏+巡线
+roslaunch ainex_example hurdles_with_visual_patrol_node.launch
+
+# 踢球示例
+roslaunch ainex_example kick_ball_node.launch
+# roslaunch ainex_example kick_ball_node.launch color:=red
+
+# 巡线示例
+roslaunch ainex_example visual_patrol_node.launch
+# roslaunch ainex_example visual_patrol_node.launch color:=red
+
+# 巡线抓取
+roslaunch ainex_example visual_patrol_pick_up_node.launch
+
+# 手动运行后台launch
+roscd ainex_bringup/scripts && sudo ./start_app_node.sh
+
+# 手动运行sensor节点
+roscd ainex_bringup/scripts && sudo ./start_sensor_node.sh

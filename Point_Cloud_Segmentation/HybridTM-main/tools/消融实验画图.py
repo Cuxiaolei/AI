@@ -87,7 +87,7 @@ def plot_experiment_curve(filtered_models, config, metric_type, is_zoom=False):
     # 图表基础配置
     plt.title('', fontsize=config['font']['title_size'])
     plt.xlabel(config['axis_labels']['x'], fontsize=config['font']['label_size'])
-    plt.ylabel(f"miou(%)", fontsize=config['font']['label_size'])
+    plt.ylabel(f"mIoU(%)", fontsize=config['font']['label_size'])
 
     # 设置坐标轴范围
     if is_zoom:
@@ -167,8 +167,8 @@ def main():
     # ==============================
     cf = {
         # 1. 基础路径配置
-        'csv_path': r"D:\桌面1\训练结果\scannet\消融\z_xiaorong\1.csv",  # 8个模型（E1-E8）数据CSV路径
-        'base_save_root': "../z_xiaorong/消融实验结果",  # 基础保存根目录
+        'csv_path': r"D:\user\Documents\ai\三维重建\我的论文-三维重建\训练结果\scannet\消融\z_xiaorong\1.csv",  # 8个模型（E1-E8）数据CSV路径
+        'base_save_root': r"D:\user\Documents\ai\三维重建\我的论文-三维重建\训练结果\scannet\消融\z_xiaorong\消融实验结果",  # 基础保存根目录
         'save_dpi': 600,  # 图片分辨率
 
         # 2. 全局图表样式（所有实验共用）

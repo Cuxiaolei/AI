@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--跌倒起立-->
+<launch>
+    <arg name="start" default="true"/>
+
+    <!--板载传感器-->
+    <include file="$(find ainex_sdk)/launch/sensor_node.launch"/>
+
+    <!--步态控制节点-->
+    <include file="$(find ainex_kinematics)/launch/ainex_controller.launch"/>
+
+    <!--跌倒起立-->
+    <node pkg="ainex_example" type="fall_rise_node.py" name="fall_rise" output="screen">
+        <param name="start"  value="$(arg start)"/>
+    </node>
+</launch>

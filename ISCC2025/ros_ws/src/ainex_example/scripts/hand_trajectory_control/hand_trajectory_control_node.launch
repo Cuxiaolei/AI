@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+    <include file="$(find ainex_example)/scripts/hand_gesture_detect/hand_gesture_detect_node.launch">
+        <arg name="start"   value="true"/>
+    </include>
+
+    <!--步态控制-->
+    <include file="$(find ainex_kinematics)/launch/ainex_controller.launch"/>
+
+    <node pkg="ainex_example" type="hand_trajectory_control_node.py" name="hand_trajectory_control" output="screen"/>
+</launch>
