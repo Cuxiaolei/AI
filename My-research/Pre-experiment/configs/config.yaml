@@ -1,6 +1,6 @@
 # 数据配置
 DATA:
-  path: './data/Ottawa Bearing Dataset'
+  path: '/root/data/Ottawa_Bearing_Dataset'
   sample_rate: 200000
   duration: 10
   window_size: 2048          # 样本窗口长度
