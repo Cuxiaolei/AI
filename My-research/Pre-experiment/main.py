@@ -26,6 +26,12 @@ class FSDGUnifiedPipeline:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
 
+        # 检查数据
+        if not os.path.exists(self.config['DATA']['path']):
+            print("❌ 错误: 数据集路径不存在!")
+            print("   请确保数据在 " + self.config['DATA']['path'] + "目录下")
+            return
+
         # 2. 初始化所有组件
         self._init_components()
 
@@ -466,12 +472,6 @@ class FSDGUnifiedPipeline:
 
 def main():
     config_path = './configs/config.yaml'
-
-    # 检查数据
-    if not os.path.exists(config_path['DATA']['path']):
-        print("❌ 错误: 数据集路径不存在!")
-        print("   请确保数据在 './data/Ottawa Bearing Dataset' 目录下")
-        return
 
     # 检查依赖
     try:
