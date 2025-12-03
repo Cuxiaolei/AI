@@ -101,7 +101,12 @@ class OttawaDataset:
             for class_idx in range(3):  # 3类健康状态
                 class_samples = data['vibration'][data['labels'] == class_idx]
                 if len(class_samples) < k_shot + n_query:
-                    continue
+                    # 样本不足时复制填充
+                    n_needed = (k_shot + n_query) - len(class_samples)
+                    class_samples = np.concatenate([
+                        class_samples,
+                        class_samples[:n_needed]
+                    ])
 
                 # 随机采样
                 indices = np.random.permutation(len(class_samples))

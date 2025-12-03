@@ -28,8 +28,11 @@ DOMAIN_ALIGN:
 
 # 模型
 MODEL:
-  classifier: 'KNN'         # KNN / SVM / RandomForest
+  classifier: 'KNN'         # KNN / SVM / RF / ProtoNet
   n_neighbors: 1           # KNN参数
+  svm_C: 1.0               # SVM正则化参数
+  rf_n_estimators: 50      # 随机森林树数量
+  rf_max_depth: 5          # 随机森林最大深度
 
 # 训练
 TRAIN:
@@ -38,6 +41,14 @@ TRAIN:
   domain_splits:            # 留一域交叉验证
     source: [0,1,2,3,4,5,6,7,8,9,10]
     target: [11]
+
+# 预测
+PREDICT:
+  test_files:             # 训练后自动预测的文件列表
+    - 'H-A-1.mat'         # 健康-增速
+    - 'I-B-2.mat'         # 内圈缺陷-减速
+    - 'O-C-3.mat'         # 外圈缺陷-增减速
+  vote_samples: 20        # 每个文件取20个样本投票
 
 # 输出
 OUTPUT:
