@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试不同特征组合效果的脚本
-直接复制保存为 test_features.py 后运行
+直接保存为 test_features.py 后运行
 """
 
 import sys
@@ -13,7 +13,7 @@ from utils.data_loader import OttawaDataset
 from models.feature_extractor import FeatureExtractor
 from models.classifier import ClassifierFactory
 
-# 配置参数
+# 基础配置
 BASE_CONFIG = {
     'DATA': {
         'path': '/root/data/Ottawa_Bearing_Dataset',
@@ -24,7 +24,7 @@ BASE_CONFIG = {
     'FEW_SHOT': {
         'k_shot': 5,
         'n_query': 15,
-        'n_episodes': 5  # 每个特征组合只测5个episode
+        'n_episodes': 5  # 每个特征组合只测5个episode加快速度
     },
     'MODEL': {
         'classifier': 'KNN',
@@ -160,7 +160,8 @@ def main():
         print("\n💡 配置修改建议:")
         print(f"  修改 config.yaml 中 FEATURE 部分:")
         for key in ['use_statistical', 'use_spectral', 'use_time_freq']:
-            print(f"    {key}: {FEATURE_CONFIGS[results.index(best)].get(key, False)}")
+            value = FEATURE_CONFIGS[results.index(best)].get(key, False)
+            print(f"    {key}: {value}")
 
     print("\n" + "=" * 60)
 
