@@ -4,7 +4,7 @@ import numpy as np
 
 
 class OttawaDataset:
-    """渥太华轴承数据集加载器（最终版）"""
+    """适配单域单类特性的数据加载器"""
 
     def __init__(self, data_path, config):
         self.data_path = data_path
@@ -15,7 +15,7 @@ class OttawaDataset:
         # 域映射表
         self.domain_map = self._create_domain_map()
 
-        # 按健康状态分类的域索引
+        # 按健康状态分类的域索引（关键：单域单类）
         self.health_domains = {
             0: [0, 1, 2, 3],  # 健康类所在的域
             1: [4, 5, 6, 7],  # 内圈类所在的域
@@ -39,7 +39,7 @@ class OttawaDataset:
         return domain_map
 
     def load_domain(self, domain_idx):
-        """加载指定域的所有数据"""
+        """加载指定域的所有数据（单域单类）"""
         domain_info = self.domain_map[domain_idx]
         all_vibration = []
         all_speed = []
@@ -95,8 +95,7 @@ class OttawaDataset:
 
     def generate_episode(self, source_domains, target_domain, k_shot, n_query):
         """
-        生成episode（允许重复采样）
-        当可用域不足时，从同一域重复采样不同样本
+        生成episode（核心：跨域按类采样，允许重复）
         """
         # 加载所有源域数据
         source_data = {idx: self.load_domain(idx) for idx in source_domains}
@@ -108,8 +107,8 @@ class OttawaDataset:
         support_set = {'X': [], 'y': []}
         query_set = {'X': [], 'y': []}
 
-        # 按类采样
-        for class_idx in range(3):  # 遍历3类健康状态
+        # 按类采样（关键逻辑）
+        for class_idx in range(3):
             # 获取包含该类样本的所有可用域
             class_domains = self.health_domains[class_idx]
             available_domains = [d for d in class_domains if d in source_domains]
@@ -119,26 +118,21 @@ class OttawaDataset:
 
             # 支持集：从可用域中采样k_shot个域（允许重复）
             support_domains = np.random.choice(
-                available_domains,
-                size=k_shot,
-                replace=True  # ✅ 关键：允许重复
+                available_domains, size=k_shot, replace=True
             )
 
             # 查询集：从可用域中采样n_query个域（允许重复）
             query_domains = np.random.choice(
-                available_domains,
-                size=n_query,
-                replace=True  # ✅ 关键：允许重复
+                available_domains, size=n_query, replace=True
             )
 
-            # 从各域抽取样本（支持集）
+            # 抽取样本
             for domain_idx in support_domains:
                 domain_data = source_data[domain_idx]
                 sample_idx = np.random.randint(len(domain_data['vibration']))
                 support_set['X'].append(domain_data['vibration'][sample_idx])
                 support_set['y'].append(class_idx)
 
-            # 从各域抽取样本（查询集）
             for domain_idx in query_domains:
                 domain_data = source_data[domain_idx]
                 sample_idx = np.random.randint(len(domain_data['vibration']))

@@ -8,31 +8,25 @@ DATA:
   n_domains: 12             # 12种工况组合
   n_trials_per_domain: 3    # 每种工况3次试验
 
-# 小样本设置
 FEW_SHOT:
-  k_shot: 5                 # 每类支持样本数
-  n_query: 15               # 每类查询样本数
-  n_episodes: 100           # 每轮episode数
+  k_shot: 10          # 增大样本量
+  n_query: 25
+  n_episodes: 50
 
-# 特征提取
 FEATURE:
-  n_features: 50            # 提取特征维度
-  use_statistical: true     # 时域统计特征
-  use_spectral: true        # 频域特征
-  use_time_freq: true       # 时频特征
+  n_features: 8       # 仅保留时频特征
+  use_statistical: false
+  use_spectral: false
+  use_time_freq: true
 
-# 域对齐
 DOMAIN_ALIGN:
-  method: 'CORAL'           # CORAL / MMD / None
-  lambda: 1.0              # 对齐损失权重
+  method: 'None'      # 禁用对齐
 
-# 模型
 MODEL:
-  classifier: 'KNN'         # KNN / SVM / RF / ProtoNet
-  n_neighbors: 1           # KNN参数
-  svm_C: 1.0               # SVM正则化参数
-  rf_n_estimators: 50      # 随机森林树数量
-  rf_max_depth: 5          # 随机森林最大深度
+  classifier: 'RF'    # 切换为随机森林
+  n_neighbors: 1
+  rf_n_estimators: 100
+  rf_max_depth: 10
 
 # 训练
 TRAIN:
