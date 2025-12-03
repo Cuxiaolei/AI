@@ -14,12 +14,13 @@ from models.feature_extractor import FeatureExtractor
 from models.classifier import ClassifierFactory
 from utils.metrics import FSMetrics
 
-# 配置参数
+# 配置参数（已修复：添加 sample_rate）
 CONFIG = {
     'DATA': {
         'path': '/root/data/Ottawa_Bearing_Dataset',
         'window_size': 2048,
-        'overlap': 0.5
+        'overlap': 0.5,
+        'sample_rate': 200000  # ✅ 修复：添加采样率
     },
     'FEW_SHOT': {
         'k_shot': 5,
