@@ -468,7 +468,7 @@ def main():
     config_path = './configs/config.yaml'
 
     # 检查数据
-    if not os.path.exists('./data/Ottawa Bearing Dataset'):
+    if not os.path.exists(config_path['DATA']['path']):
         print("❌ 错误: 数据集路径不存在!")
         print("   请确保数据在 './data/Ottawa Bearing Dataset' 目录下")
         return
