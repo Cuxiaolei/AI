@@ -2,14 +2,16 @@ import yaml
 import numpy as np
 import scipy.io as sio
 import matplotlib.pyplot as plt
+import os
+import joblib
+import time
+import warnings
+from tqdm import tqdm
 from utils.data_loader import OttawaDataset
 from utils.metrics import FSMetrics, DomainShiftAnalyzer
 from models.feature_extractor import FeatureExtractor
 from models.domain_aligner import CoralAligner, MMDAligner
 from models.classifier import ClassifierFactory
-import os
-import joblib
-import warnings
 
 warnings.filterwarnings('ignore')
 
@@ -29,7 +31,7 @@ class FSDGUnifiedPipeline:
         # 检查数据
         if not os.path.exists(self.config['DATA']['path']):
             print("❌ 错误: 数据集路径不存在!")
-            print("   请确保数据在 " + self.config['DATA']['path'] + "目录下")
+            print("   请确保数据在" + self.config['DATA']['path'] + "目录下")
             return
 
         # 2. 初始化所有组件
@@ -66,49 +68,56 @@ class FSDGUnifiedPipeline:
         print(f"   小样本设置: K={self.config['FEW_SHOT']['k_shot']} shots")
 
     def train_and_validate(self):
-        """训练+验证（主流程）"""
+        """训练+验证（带详细进度显示）"""
         print("\n" + "=" * 60)
         print("【开始训练】留一域交叉验证...")
 
         n_domains = self.config['DATA']['n_domains']
         results = []
 
-        # 留一域交叉验证
-        for target_idx in range(n_domains):
+        # 留一域交叉验证（域级进度条）
+        for target_idx in tqdm(range(n_domains), desc="域验证进度", ncols=80):
             source_domains = [i for i in range(n_domains) if i != target_idx]
             domain_info = self.dataset.domain_map[target_idx]
 
-            print(f"\n>>> 目标域 {target_idx}: "
-                  f"{domain_info['health']}-{domain_info['speed']}")
+            print(f"\n{'=' * 60}")
+            print(f"🎯 目标域 {target_idx}: {domain_info['health']}-{domain_info['speed']}")
+            print(f"   源域数量: {len(source_domains)}")
+            print(f"   开始时间: {time.strftime('%H:%M:%S')}")
 
-            # 在目标域上生成测试特征
+            # 加载目标域数据
+            print("   📂 加载目标域数据...")
             target_data = self.dataset.load_domain(target_idx)
             target_features = self.feature_extractor.extract_features(
                 target_data['vibration']
             )
-            target_labels = target_data['labels']
+            print(f"   ✅ 目标域加载完成: {target_features.shape[0]}个样本")
 
-            # 域偏移分析（可选）
-            if target_idx == 0:  # 仅分析第一个域以节省时间
-                source_data_dict = {
-                    idx: self.dataset.load_domain(idx) for idx in source_domains[:3]
-                }
-                shift_scores = self.shift_analyzer.analyze_shift(
-                    source_data_dict, target_data
-                )
-                print(f"   域偏移分析: 最难对齐的源域 = {shift_scores[0][0]}")
-
-            # 多episode测试
+            # 多episode测试（episode级进度条）
             episode_results = []
-            for episode in range(self.config['FEW_SHOT']['n_episodes']):
+            episode_pbar = tqdm(
+                range(self.config['FEW_SHOT']['n_episodes']),
+                desc=f"Episode进度[域{target_idx}]",
+                ncols=80,
+                leave=False
+            )
+
+            for episode in episode_pbar:
+                # 运行单个episode
                 result = self._run_single_episode(
-                    source_domains, target_features, target_labels
+                    source_domains, target_features, target_data['labels']
                 )
                 episode_results.append(result)
 
+                # 实时更新进度条后缀
+                episode_pbar.set_postfix({
+                    'acc': f"{result['metrics']['accuracy']:.3f}",
+                    'f1': f"{result['metrics']['f1_macro']:.3f}"
+                })
+
             # 汇总结果
-            mean_acc = np.mean([r['accuracy'] for r in episode_results])
-            std_acc = np.std([r['accuracy'] for r in episode_results])
+            mean_acc = np.mean([r['metrics']['accuracy'] for r in episode_results])
+            std_acc = np.std([r['metrics']['accuracy'] for r in episode_results])
             results.append({
                 'target_domain': target_idx,
                 'mean_acc': mean_acc,
@@ -116,59 +125,75 @@ class FSDGUnifiedPipeline:
                 'episodes': episode_results
             })
 
-            print(f"   Episode准确率: {mean_acc:.4f} ± {std_acc:.4f}")
+            print(f"\n   📊 域{target_idx}完成: {mean_acc:.4f} ± {std_acc:.4f}")
+            print(f"   ⏱️  耗时: {time.strftime('%H:%M:%S')}")
 
         # 总体结果
         self._show_overall_results(results)
         return results
 
     def _run_single_episode(self, source_domains, target_features, target_labels):
-        """运行单个episode"""
-        # 生成episode
+        """运行单个episode（带详细步骤日志）"""
+        start_time = time.time()
+
+        # 1. 生成episode
+        print(f"   🔄 生成episode...", end=" ")
         support_set, query_set, _ = self.dataset.generate_episode(
             source_domains, 0,  # target_idx占位符
             self.config['FEW_SHOT']['k_shot'],
             self.config['FEW_SHOT']['n_query']
         )
+        print(f"✅ Support:{support_set['X'].shape}, Query:{query_set['X'].shape}")
 
-        # 特征提取
-        support_features = self.feature_extractor.extract_features(
-            support_set['X']
-        )
-        query_features = self.feature_extractor.extract_features(
-            query_set['X']
-        )
+        # 2. 特征提取
+        print(f"   🔧 提取特征...", end=" ")
+        support_features = self.feature_extractor.extract_features(support_set['X'])
+        query_features = self.feature_extractor.extract_features(query_set['X'])
+        print(f"✅ 完成 (支持集{support_features.shape}, 查询集{query_features.shape})")
 
-        # 域对齐（CORAL）
+        # 3. 域对齐
         if self.config['DOMAIN_ALIGN']['method'] == 'CORAL':
+            print(f"   🎯 CORAL域对齐...", end=" ")
             support_aligned, target_aligned = self.domain_aligner.align(
                 support_features, target_features
             )
             query_aligned, _ = self.domain_aligner.align(
                 query_features, target_features
             )
+            print(f"✅ 完成")
         else:
+            print(f"   ⏭️  跳过域对齐")
             support_aligned = support_features
             query_aligned = query_features
 
-        # 创建并训练分类器
+        # 4. 分类器训练
+        print(f"   🎓 训练分类器...", end=" ")
         classifier = ClassifierFactory.create_classifier(self.config)
         classifier.fit(support_aligned, support_set['y'])
+        print(f"✅ {self.config['MODEL']['classifier']}训练完成")
 
-        # 在查询集上评估
+        # 5. 评估
+        print(f"   📏 评估查询集...", end=" ")
         eval_results = classifier.evaluate(query_aligned, query_set['y'])
+        print(f"✅ Acc={eval_results['accuracy']:.3f}, F1={eval_results['f1_macro']:.3f}")
 
-        # 域对齐效果评估
+        # 6. 域对齐效果评估
         alignment_metrics = {}
         if self.domain_aligner:
+            print(f"   📐 计算域对齐距离...", end=" ")
             alignment_metrics = self.metrics.compute_domain_alignment_metrics(
                 support_aligned, target_aligned
             )
+            print(f"✅ CORAL距离={alignment_metrics['coral_distance']:.2f}")
+
+        episode_time = time.time() - start_time
+        print(f"   ⏱️  Episode耗时: {episode_time:.2f}s")
 
         return {
             'accuracy': eval_results['accuracy'],
             'metrics': eval_results,
-            'alignment': alignment_metrics
+            'alignment': alignment_metrics,
+            'time': episode_time
         }
 
     def _show_overall_results(self, results):
@@ -192,20 +217,18 @@ class FSDGUnifiedPipeline:
         output_dir = self.config['OUTPUT']['result_dir']
         os.makedirs(output_dir, exist_ok=True)
 
-        # 1. 保存最后一域的分类器
+        # 保存最佳模型
         model_path = os.path.join(output_dir, 'final_classifier.pkl')
-        # 这里保存的是最后一个episode的分类器，实际应保存最佳模型
-        # 为简化，我们重新训练并保存
         self._save_best_model(model_path)
 
-        # 2. 保存详细结果
+        # 保存详细结果
         self._save_detailed_results()
 
-        # 3. 可视化
+        # 可视化
         if self.config['OUTPUT']['visualize']:
             self._plot_results()
 
-        # 4. 保存配置
+        # 保存配置
         config_save_path = os.path.join(output_dir, 'config.yaml')
         with open(config_save_path, 'w') as f:
             yaml.dump(self.config, f, default_flow_style=False)
@@ -214,13 +237,12 @@ class FSDGUnifiedPipeline:
 
     def _save_best_model(self, model_path):
         """保存最佳模型（基于验证集性能）"""
-        # 简单策略：使用最后一个目标域的最佳episode
         if not hasattr(self, 'results') or not self.results:
             print("⚠️  无训练结果可保存")
             return
 
-        # 重新创建一个最佳分类器
-        best_result = self.results[-1]  # 最后一个域
+        # 使用最后一个域的最佳episode
+        best_result = self.results[-1]
         best_episode = max(best_result['episodes'], key=lambda x: x['accuracy'])
 
         # 重新训练该episode
@@ -318,7 +340,7 @@ class FSDGUnifiedPipeline:
         print(f"  可视化: {plot_path}")
 
     def predict_on_test_files(self):
-        """在指定的测试文件上进行预测"""
+        """在测试文件上预测（带进度显示）"""
         print("\n" + "=" * 60)
         print("【预测验证】在测试文件上进行预测...")
 
@@ -332,38 +354,47 @@ class FSDGUnifiedPipeline:
             return
 
         # 加载模型
+        print(f"   📦 加载模型: {model_path}")
         classifier = ClassifierFactory.create_classifier(self.config)
         classifier.load(model_path)
 
-        # 使用任意源域准备支持集（用于对齐）
+        # 使用源域准备对齐参考
         source_domains = [0, 1, 2]
+        print(f"   🎯 使用源域 {source_domains} 作为对齐参考")
 
-        print(f"使用模型: {model_path}")
-        print("-" * 60)
-
-        # 对每个测试文件
+        # 对每个测试文件（文件级进度条）
         results = []
-        for test_file in test_files:
+        file_pbar = tqdm(test_files, desc="预测进度", ncols=80)
+
+        for test_file in file_pbar:
             file_path = os.path.join(self.config['DATA']['path'], test_file)
             if not os.path.exists(file_path):
-                print(f"  ⚠️  文件不存在: {test_file}")
+                file_pbar.set_postfix({'status': '文件不存在'})
                 continue
 
+            # 更新进度条描述
+            file_pbar.set_description(f"预测: {test_file}")
+
+            # 预测
             result = self._predict_single_file(
                 file_path, classifier, source_domains
             )
             result['file'] = test_file
             results.append(result)
 
-            # 打印结果
-            print(f"\n  📄 文件: {test_file}")
-            print(f"     预测: {result['prediction']}")
-            print(f"     置信度: {result['confidence']:.4f}")
-            print(f"     投票详情: {result['all_votes']}")
+            # 显示结果
+            print(f"\n   📄 {test_file}")
+            print(f"      预测: {result['prediction']}")
+            print(f"      置信度: {result['confidence']:.4f}")
+
+            # 更新进度条后缀
+            file_pbar.set_postfix({
+                'pred': result['prediction'][:2],
+                'conf': f"{result['confidence']:.2f}"
+            })
 
         # 保存预测结果
         self._save_prediction_results(results)
-        print("\n" + "=" * 60)
 
     def _predict_single_file(self, file_path, classifier, source_domains):
         """预测单个文件"""
@@ -388,17 +419,16 @@ class FSDGUnifiedPipeline:
 
         features = np.array(features)
 
-        # 生成一个episode来获取支持集（用于对齐）
+        # 生成episode来获取支持集（用于对齐）
         support_set, _, _ = self.dataset.generate_episode(
             source_domains, 0,
             self.config['FEW_SHOT']['k_shot'],
-            5  # 小的查询集
+            5
         )
         support_features = self.feature_extractor.extract_features(support_set['X'])
 
-        # 对齐（如果需要）
+        # 对齐
         if self.config['DOMAIN_ALIGN']['method'] == 'CORAL':
-            # 简单处理：用支持集的协方差对齐测试特征
             cov_s = np.cov(support_features, rowvar=False) + np.eye(support_features.shape[1])
             cov_t = np.cov(features, rowvar=False) + np.eye(features.shape[1])
             from scipy.linalg import sqrtm
@@ -457,16 +487,27 @@ class FSDGUnifiedPipeline:
         print("   训练模式: 留一域交叉验证")
         print("   预测模式: 自动验证测试文件")
 
+        total_start = time.time()
+
         # 1. 训练
+        print(f"\n{'=' * 60}")
+        print("⏱️  开始训练...")
         self.train_and_validate()
 
         # 2. 保存
+        print(f"\n{'=' * 60}")
+        print("💾 保存结果...")
         self.save_model_and_results()
 
         # 3. 预测
+        print(f"\n{'=' * 60}")
+        print("🔮 开始预测...")
         self.predict_on_test_files()
 
-        print("\n✅ 实验全部完成！请查看results目录")
+        total_time = time.time() - total_start
+        print("\n" + "=" * 60)
+        print(f"✅ 实验全部完成！总耗时: {total_time / 60:.2f}分钟")
+        print("📁 请查看results目录")
         print("=" * 60)
 
 
@@ -475,11 +516,11 @@ def main():
 
     # 检查依赖
     try:
-        import scipy, numpy, sklearn, pywt, matplotlib, yaml
+        import scipy, numpy, sklearn, pywt, matplotlib, yaml, joblib, tqdm
         print("✅ 所有依赖库已安装")
     except ImportError as e:
         print(f"❌ 缺少依赖: {e}")
-        print("   请安装: pip install scipy numpy scikit-learn PyWavelets matplotlib pyyaml")
+        print("   请安装: pip install scipy numpy scikit-learn PyWavelets matplotlib pyyaml joblib tqdm")
         return
 
     # 运行完整流程
