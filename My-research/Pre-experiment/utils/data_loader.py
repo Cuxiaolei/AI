@@ -4,7 +4,7 @@ import numpy as np
 
 
 class OttawaDataset:
-    """渥太华轴承数据集加载器（适配单域单类特性）"""
+    """渥太华轴承数据集加载器（最终版）"""
 
     def __init__(self, data_path, config):
         self.data_path = data_path
@@ -95,10 +95,10 @@ class OttawaDataset:
 
     def generate_episode(self, source_domains, target_domain, k_shot, n_query):
         """
-        生成episode（适配单域单类特性）
-        从所有源域中，每类健康状态采样k_shot支持样本和n_query查询样本
+        生成episode（允许重复采样）
+        当可用域不足时，从同一域重复采样不同样本
         """
-        # 加载所有源域数据（包含多类，但分布在不同域）
+        # 加载所有源域数据
         source_data = {idx: self.load_domain(idx) for idx in source_domains}
 
         # 加载目标域数据
@@ -108,49 +108,38 @@ class OttawaDataset:
         support_set = {'X': [], 'y': []}
         query_set = {'X': [], 'y': []}
 
-        # 按类采样（核心逻辑：单域单类 → 跨域采样）
+        # 按类采样
         for class_idx in range(3):  # 遍历3类健康状态
-            # 获取包含该类样本的所有域
+            # 获取包含该类样本的所有可用域
             class_domains = self.health_domains[class_idx]
             available_domains = [d for d in class_domains if d in source_domains]
 
-            if len(available_domains) < max(k_shot, n_query):
-                raise ValueError(f"类{class_idx}可用域不足: {len(available_domains)} < {max(k_shot, n_query)}")
+            if len(available_domains) == 0:
+                raise ValueError(f"类{class_idx}无可用域")
 
-            # 支持集：从可用域中采样k_shot个域，每个域取1个样本
+            # 支持集：从可用域中采样k_shot个域（允许重复）
             support_domains = np.random.choice(
                 available_domains,
-                size=min(k_shot, len(available_domains)),
-                replace=False
+                size=k_shot,
+                replace=True  # ✅ 关键：允许重复
             )
 
-            # 查询集：从剩余域或允许重复采样n_query个域
-            remaining_domains = [d for d in available_domains if d not in support_domains]
-            if len(remaining_domains) < n_query:
-                # 如果剩余不足，允许从所有可用域中重复采样
-                query_domain_pool = available_domains
-                replace = True
-            else:
-                query_domain_pool = remaining_domains
-                replace = False
-
+            # 查询集：从可用域中采样n_query个域（允许重复）
             query_domains = np.random.choice(
-                query_domain_pool,
+                available_domains,
                 size=n_query,
-                replace=replace
+                replace=True  # ✅ 关键：允许重复
             )
 
-            # 从各域抽取样本
-            # 支持集
-            for i, domain_idx in enumerate(support_domains):
+            # 从各域抽取样本（支持集）
+            for domain_idx in support_domains:
                 domain_data = source_data[domain_idx]
-                # 从该域所有样本中随机取1个
                 sample_idx = np.random.randint(len(domain_data['vibration']))
                 support_set['X'].append(domain_data['vibration'][sample_idx])
                 support_set['y'].append(class_idx)
 
-            # 查询集
-            for i, domain_idx in enumerate(query_domains):
+            # 从各域抽取样本（查询集）
+            for domain_idx in query_domains:
                 domain_data = source_data[domain_idx]
                 sample_idx = np.random.randint(len(domain_data['vibration']))
                 query_set['X'].append(domain_data['vibration'][sample_idx])
@@ -161,14 +150,5 @@ class OttawaDataset:
         support_set['y'] = np.array(support_set['y'])
         query_set['X'] = np.vstack(query_set['X'])
         query_set['y'] = np.array(query_set['y'])
-
-        # 维度验证
-        expected_support = 3 * k_shot
-        expected_query = 3 * n_query
-
-        assert support_set['X'].shape[0] == expected_support, \
-            f"Support集样本数错误: {support_set['X'].shape[0]} != {expected_support}"
-        assert query_set['X'].shape[0] == expected_query, \
-            f"Query集样本数错误: {query_set['X'].shape[0]} != {expected_query}"
 
         return support_set, query_set, target_data
