@@ -1,11 +1,10 @@
 import os
 import scipy.io as sio
 import numpy as np
-import warnings
 
 
 class OttawaDataset:
-    """渥太华轴承数据集加载器（终极修复版）"""
+    """渥太华轴承数据集加载器（适配单域单类特性）"""
 
     def __init__(self, data_path, config):
         self.data_path = data_path
@@ -15,6 +14,13 @@ class OttawaDataset:
 
         # 域映射表
         self.domain_map = self._create_domain_map()
+
+        # 按健康状态分类的域索引
+        self.health_domains = {
+            0: [0, 1, 2, 3],  # 健康类所在的域
+            1: [4, 5, 6, 7],  # 内圈类所在的域
+            2: [8, 9, 10, 11]  # 外圈类所在的域
+        }
 
     def _create_domain_map(self):
         """创建域到健康状态和转速条件的映射"""
@@ -37,15 +43,12 @@ class OttawaDataset:
         domain_info = self.domain_map[domain_idx]
         all_vibration = []
         all_speed = []
-        labels = []
 
-        for trial_idx, file_name in enumerate(domain_info['files']):
+        for file_name in domain_info['files']:
             file_path = os.path.join(self.data_path, file_name)
             if not os.path.exists(file_path):
-                warnings.warn(f"文件不存在: {file_path}", UserWarning)
                 continue
 
-            # 加载MAT文件
             try:
                 data = sio.loadmat(file_path)
                 vibration = data['Channel_1'].flatten()
@@ -57,25 +60,16 @@ class OttawaDataset:
                 for sample in samples:
                     all_vibration.append(sample['vibration'])
                     all_speed.append(sample['speed'])
-                    labels.append(self._health_to_label(domain_info['health']))
-            except Exception as e:
-                warnings.warn(f"加载失败 {file_name}: {e}", UserWarning)
+            except:
+                pass
 
-        # 额外验证：确保标签非空
-        if len(labels) == 0:
-            warnings.warn(f"域{domain_idx} 未加载到任何有效数据！", UserWarning)
-            # 返回空数组但保持结构
-            return {
-                'vibration': np.empty((0, self.window_size)),
-                'speed': np.empty((0, self.window_size)),
-                'labels': np.array([]),
-                'domain_idx': domain_idx
-            }
+        # 标签由域决定（单域单类）
+        label = self._health_to_label(domain_info['health'])
 
         return {
             'vibration': np.vstack(all_vibration),
             'speed': np.vstack(all_speed),
-            'labels': np.array(labels),
+            'labels': np.full(len(all_vibration), label),
             'domain_idx': domain_idx
         }
 
@@ -101,10 +95,10 @@ class OttawaDataset:
 
     def generate_episode(self, source_domains, target_domain, k_shot, n_query):
         """
-        生成小样本学习episode（终极修复版）
-        处理n_available=0的极端情况
+        生成episode（适配单域单类特性）
+        从所有源域中，每类健康状态采样k_shot支持样本和n_query查询样本
         """
-        # 加载源域数据
+        # 加载所有源域数据（包含多类，但分布在不同域）
         source_data = {idx: self.load_domain(idx) for idx in source_domains}
 
         # 加载目标域数据
@@ -114,57 +108,67 @@ class OttawaDataset:
         support_set = {'X': [], 'y': []}
         query_set = {'X': [], 'y': []}
 
-        # 每类所需总样本数
-        needed_per_class = k_shot + n_query
+        # 按类采样（核心逻辑：单域单类 → 跨域采样）
+        for class_idx in range(3):  # 遍历3类健康状态
+            # 获取包含该类样本的所有域
+            class_domains = self.health_domains[class_idx]
+            available_domains = [d for d in class_domains if d in source_domains]
 
-        for domain_idx, data in source_data.items():
-            for class_idx in range(3):  # 3类健康状态
-                # 获取该类所有样本
-                class_mask = (data['labels'] == class_idx)
-                class_samples = data['vibration'][class_mask]
-                n_available = len(class_samples)
+            if len(available_domains) < max(k_shot, n_query):
+                raise ValueError(f"类{class_idx}可用域不足: {len(available_domains)} < {max(k_shot, n_query)}")
 
-                # ===== 终极修复：处理n_available=0 =====
-                if n_available == 0:
-                    warnings.warn(
-                        f"域{domain_idx} 类{class_idx} 无可用样本，使用零填充虚拟样本",
-                        UserWarning
-                    )
-                    # 创建虚拟样本（零填充）
-                    dummy_sample = np.zeros((1, self.window_size))
-                    class_samples = np.tile(dummy_sample, (needed_per_class, 1))
-                    n_available = needed_per_class  # 更新为填充后数量
+            # 支持集：从可用域中采样k_shot个域，每个域取1个样本
+            support_domains = np.random.choice(
+                available_domains,
+                size=min(k_shot, len(available_domains)),
+                replace=False
+            )
 
-                # 如果样本不足，复制填充
-                if n_available < needed_per_class:
-                    repeat_times = (needed_per_class + n_available - 1) // n_available
-                    class_samples = np.tile(class_samples, (repeat_times, 1))[:needed_per_class]
+            # 查询集：从剩余域或允许重复采样n_query个域
+            remaining_domains = [d for d in available_domains if d not in support_domains]
+            if len(remaining_domains) < n_query:
+                # 如果剩余不足，允许从所有可用域中重复采样
+                query_domain_pool = available_domains
+                replace = True
+            else:
+                query_domain_pool = remaining_domains
+                replace = False
 
-                # 随机采样（确保索引不越界）
-                indices = np.random.permutation(len(class_samples))
-                support_idx = indices[:k_shot]
-                query_idx = indices[k_shot:k_shot + n_query]
+            query_domains = np.random.choice(
+                query_domain_pool,
+                size=n_query,
+                replace=replace
+            )
 
-                # 添加到集合
-                support_set['X'].append(class_samples[support_idx])
-                support_set['y'].extend([class_idx] * k_shot)
-                query_set['X'].append(class_samples[query_idx])
-                query_set['y'].extend([class_idx] * n_query)
+            # 从各域抽取样本
+            # 支持集
+            for i, domain_idx in enumerate(support_domains):
+                domain_data = source_data[domain_idx]
+                # 从该域所有样本中随机取1个
+                sample_idx = np.random.randint(len(domain_data['vibration']))
+                support_set['X'].append(domain_data['vibration'][sample_idx])
+                support_set['y'].append(class_idx)
 
-        # 最终验证：确保有足够的样本
-        if not support_set['X'] or not query_set['X']:
-            raise ValueError("样本生成失败：支持集或查询集为空")
+            # 查询集
+            for i, domain_idx in enumerate(query_domains):
+                domain_data = source_data[domain_idx]
+                sample_idx = np.random.randint(len(domain_data['vibration']))
+                query_set['X'].append(domain_data['vibration'][sample_idx])
+                query_set['y'].append(class_idx)
 
-        # 确保是2D数组（即使只有一个样本）
+        # 转换为numpy数组
         support_set['X'] = np.vstack(support_set['X'])
         support_set['y'] = np.array(support_set['y'])
         query_set['X'] = np.vstack(query_set['X'])
         query_set['y'] = np.array(query_set['y'])
 
         # 维度验证
-        assert support_set['X'].shape[0] == len(support_set['y']), \
-            f"支持集X和y维度不匹配: X={support_set['X'].shape}, y={support_set['y'].shape}"
-        assert query_set['X'].shape[0] == len(query_set['y']), \
-            f"查询集X和y维度不匹配: X={query_set['X'].shape}, y={query_set['y'].shape}"
+        expected_support = 3 * k_shot
+        expected_query = 3 * n_query
+
+        assert support_set['X'].shape[0] == expected_support, \
+            f"Support集样本数错误: {support_set['X'].shape[0]} != {expected_support}"
+        assert query_set['X'].shape[0] == expected_query, \
+            f"Query集样本数错误: {query_set['X'].shape[0]} != {expected_query}"
 
         return support_set, query_set, target_data
