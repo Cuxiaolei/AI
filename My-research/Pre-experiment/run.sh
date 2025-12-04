@@ -3,20 +3,14 @@
 
 echo "开始2D-ResNet小样本域泛化实验"
 
-
-# 3. 清理旧结果
-if [ -d "./results" ]; then
-    echo "🗑️  清理旧结果..."
-    rm -rf ./results
-fi
-
-mkdir -p ./results
-
-# 4. 运行训练
+训练
 echo "⏱️  开始训练"
-python main.py
 
-echo "实验完成！"
-echo "结果位置:"
-echo "   模型: ./results/resnet2d_model.pt"
-echo "   报告: ./results/detailed_results.txt"
+# 步骤1：快速验证
+python main.py --mode train --epochs 10 --save_dir ./debug
+
+# 步骤2：核心训练
+python main.py --mode continual --save_dir ./exp_main
+
+# 步骤3：最终评估
+python main.py --mode test --resume ./exp_main/best_model.pth --save_dir ./exp_final
