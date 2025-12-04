@@ -5,7 +5,8 @@ CNN主入口：2D-ResNet版本
 """
 
 from .resnet2d_tf import ResNet2DAdapter, PrototypeNetwork2D
-
+import torch
+import torch.nn as nn
 
 class CNNBackbone(nn.Module):
     """统一接口：2D-ResNet"""
