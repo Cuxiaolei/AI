@@ -224,66 +224,66 @@ class FSDGContinualPipeline:
             acc = self.evaluate_on_domain(target_idx, temp_support)
             initial_performance[f'domain_{target_idx}'] = acc
 
-    results.append(initial_performance)
-    print(f"初始平均准确率: {np.mean(list(initial_performance.values())):.4f}")
+        results.append(initial_performance)
+        print(f"初始平均准确率: {np.mean(list(initial_performance.values())):.4f}")
 
-    # 顺序学习每个域
-    print("\n🔄 开始持续学习...")
-    for target_idx in tqdm(range(n_domains), desc="持续学习"):
-        print(f"\n{'=' * 60}")
-        print(f"学习域 {target_idx}: {self.dataset.domain_map[target_idx]}")
-        print(f"{'=' * 60}")
+        # 顺序学习每个域
+        print("\n🔄 开始持续学习...")
+        for target_idx in tqdm(range(n_domains), desc="持续学习"):
+            print(f"\n{'=' * 60}")
+            print(f"学习域 {target_idx}: {self.dataset.domain_map[target_idx]}")
+            print(f"{'=' * 60}")
 
-        # 源域：除了目标域外的所有域
-        source_domains = [i for i in range(n_domains) if i != target_idx]
+            # 源域：除了目标域外的所有域
+            source_domains = [i for i in range(n_domains) if i != target_idx]
 
-        # 生成k-shot支持集
-        support_set, query_set, target_set = self.dataset.generate_fsdg_episode(
-            source_domains, target_idx,
-            k_shot=self.config['FEW_SHOT']['k_shot'],
-            n_query=self.config['FEW_SHOT']['n_query']
-        )
-
-        # 更新记忆缓冲区
-        self.update_memory(target_idx, support_set)
-
-        # 训练N个episode
-        episode_accs = []
-        for episode in range(self.config['FEW_SHOT']['n_episodes']):
-            loss_dict = self.train_episode(
-                support_set, query_set, target_set, target_idx
+            # 生成k-shot支持集
+            support_set, query_set, target_set = self.dataset.generate_fsdg_episode(
+                source_domains, target_idx,
+                k_shot=self.config['FEW_SHOT']['k_shot'],
+                n_query=self.config['FEW_SHOT']['n_query']
             )
 
-            # 每10个episode评估一次
-            if episode % 10 == 0:
-                acc = self.evaluate_episode(support_set, query_set)
-                episode_accs.append(acc)
-                print(f"Episode {episode:3d}: Acc={acc:.3f}, Loss={loss_dict['total_loss']:.4f}")
+            # 更新记忆缓冲区
+            self.update_memory(target_idx, support_set)
 
-        # 更新EWC（如果使用）
-        if self.continual_method == 'ewc':
-            self.ewc_reg.update_fisher(support_set, self.backbone)
+            # 训练N个episode
+            episode_accs = []
+            for episode in range(self.config['FEW_SHOT']['n_episodes']):
+                loss_dict = self.train_episode(
+                    support_set, query_set, target_set, target_idx
+                )
 
-        # 评估在所有已见域上的性能
-        domain_performance = {}
-        for eval_domain in range(target_idx + 1):
-            memory_support = {
-                'x': torch.cat([self.memory_buffer[d]['x'] for d in range(target_idx + 1)]),
-                'y': torch.cat([self.memory_buffer[d]['y'] for d in range(target_idx + 1)])
-            }
-            acc = self.evaluate_on_domain(eval_domain, memory_support)
-            domain_performance[f'domain_{eval_domain}'] = acc
+                # 每10个episode评估一次
+                if episode % 10 == 0:
+                    acc = self.evaluate_episode(support_set, query_set)
+                    episode_accs.append(acc)
+                    print(f"Episode {episode:3d}: Acc={acc:.3f}, Loss={loss_dict['total_loss']:.4f}")
 
-        results.append(domain_performance)
+            # 更新EWC（如果使用）
+            if self.continual_method == 'ewc':
+                self.ewc_reg.update_fisher(support_set, self.backbone)
 
-        # 打印当前性能
-        mean_acc = np.mean(list(domain_performance.values()))
-        print(f"📈 域{target_idx}学习后平均准确率: {mean_acc:.4f}")
+            # 评估在所有已见域上的性能
+            domain_performance = {}
+            for eval_domain in range(target_idx + 1):
+                memory_support = {
+                    'x': torch.cat([self.memory_buffer[d]['x'] for d in range(target_idx + 1)]),
+                    'y': torch.cat([self.memory_buffer[d]['y'] for d in range(target_idx + 1)])
+                }
+                acc = self.evaluate_on_domain(eval_domain, memory_support)
+                domain_performance[f'domain_{eval_domain}'] = acc
 
-        # 保存中间结果
-        self.save_checkpoint(target_idx)
+            results.append(domain_performance)
 
-    return results
+            # 打印当前性能
+            mean_acc = np.mean(list(domain_performance.values()))
+            print(f"📈 域{target_idx}学习后平均准确率: {mean_acc:.4f}")
+
+            # 保存中间结果
+            self.save_checkpoint(target_idx)
+
+        return results
 
 
 def evaluate_episode(self, support_set, query_set):
