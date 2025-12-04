@@ -110,24 +110,21 @@ class ContinualLearningTrainer(BaseTrainer):
         correct = 0
         total = 0
 
-        # 如果启用了记忆回放，合并数据
-        if self.memory_buffer and self.rehearsal_ratio > 0:
-            replay_data = self._get_replay_batch()
-        else:
-            replay_data = None
+        # 从数据集中创建 EpisodeDataLoader
+        from data.dataset import EpisodeDataLoader
 
-        for batch_idx, batch in enumerate(train_loader):
-            data = batch['data'].to(self.device)
-            labels = batch['label'].to(self.device)
+        episode_loader = EpisodeDataLoader(
+            dataset=train_loader.dataset,
+            n_way=self.config['model']['num_classes'],
+            k_shot=self.config['data']['k_shot'],
+            n_query=self.config['data']['n_query']
+        )
 
-            # 当前批次的域标签
-            batch_size = data.shape[0]
-            domain_labels = torch.full((batch_size,),
-                                       self.domains.index(domain),
-                                       device=self.device)
+        # 每个epoch训练固定数量的episodes
+        num_episodes = len(train_loader)
 
+        for episode_idx in range(num_episodes):
             # 生成episode
-            episode_loader = train_loader.dataset.episode_loader
             support_data, support_labels, query_data, query_labels = \
                 episode_loader.generate_episode()
 
@@ -136,14 +133,25 @@ class ContinualLearningTrainer(BaseTrainer):
             query_data = query_data.to(self.device)
             query_labels = query_labels.to(self.device)
 
-            # 前向传播和损失计算
+            # 域标签
+            batch_size = query_data.shape[0]
+            domain_label_idx = self.domains.index(domain)
+            domain_labels = torch.full((batch_size,), domain_label_idx, device=self.device)
+
+            # 记忆回放数据
+            if self.memory_buffer and self.rehearsal_ratio > 0:
+                replay_data = self._get_replay_batch()
+            else:
+                replay_data = None
+
+            # 前向传播
             loss, metrics = self.criterion(
                 self.model, support_data, support_labels,
                 query_data, query_labels,
                 domain_labels if self.criterion.domain_weight > 0 else None
             )
 
-            # 记忆回放损失
+            # 回放损失
             if replay_data is not None:
                 replay_loss = self._compute_replay_loss(replay_data)
                 loss += replay_loss
@@ -152,13 +160,7 @@ class ContinualLearningTrainer(BaseTrainer):
             # 反向传播
             optimizer.zero_grad()
             loss.backward()
-
-            # 梯度裁剪
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                max_norm=self.config['training'].get('grad_clip', 5.0)
-            )
-
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
             optimizer.step()
 
             # 统计
@@ -167,7 +169,6 @@ class ContinualLearningTrainer(BaseTrainer):
             if 'domain_loss' in metrics:
                 total_domain_loss += metrics['domain_loss']
 
-            # 计算准确率
             with torch.no_grad():
                 pred, _ = self.model.predict(query_data)
                 correct += (pred == query_labels).sum().item()
@@ -176,9 +177,9 @@ class ContinualLearningTrainer(BaseTrainer):
         scheduler.step()
 
         return {
-            'total_loss': total_loss / len(train_loader),
-            'proto_loss': total_proto_loss / len(train_loader),
-            'domain_loss': total_domain_loss / len(train_loader),
+            'total_loss': total_loss / num_episodes,
+            'proto_loss': total_proto_loss / num_episodes,
+            'domain_loss': total_domain_loss / num_episodes if total_domain_loss > 0 else 0,
             'accuracy': correct / total
         }
 
