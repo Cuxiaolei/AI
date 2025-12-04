@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import copy
 from collections import deque
-from .base_trainer import BaseTrainer
+from trainers.base_trainer import BaseTrainer
 from ..losses.prototypical_loss import PrototypicalLoss
 
 

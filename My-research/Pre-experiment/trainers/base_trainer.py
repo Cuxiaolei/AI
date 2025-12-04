@@ -4,8 +4,8 @@ from torch.utils.data import DataLoader
 from typing import Dict
 import os
 import time
-from ..utils.metrics import compute_metrics
-from ..utils.visualizer import plot_confusion_matrix
+from utils.metrics import compute_metrics
+from utils.visualizer import plot_confusion_matrix
 
 
 class BaseTrainer:
