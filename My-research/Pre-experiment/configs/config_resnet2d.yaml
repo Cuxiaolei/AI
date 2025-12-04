@@ -1,0 +1,28 @@
+# 渥太华轴承数据集2D-ResNet配置
+DATA:
+  path: '/root/data/Ottawa_Bearing_Dataset'
+  window_size: 2048
+  overlap: 0.5
+  target_size: 64  # 时频图尺寸
+
+MODEL:
+  cnn_type: 'resnet2d'
+  feature_dim: 128
+  pretrained: true
+  target_size: 64
+
+FEW_SHOT:
+  k_shot: 10            # 支持集样本数
+  n_query: 25           # 查询集样本数
+  n_episodes: 50        # 训练episode数
+
+TRAIN:
+  learning_rate: 0.0001  # 预训练模型用小学习率
+  weight_decay: 0.0001
+  lambda_coral: 0.5      # 域对齐损失权重
+  lambda_proto: 0.3      # 原型对比损失权重
+
+OUTPUT:
+  model_path: './results/resnet2d_model.pt'
+  log_dir: './logs_resnet2d'
+  result_dir: './results'
