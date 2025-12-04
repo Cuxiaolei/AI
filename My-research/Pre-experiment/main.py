@@ -333,7 +333,7 @@ def main():
     config_path = './configs/config_resnet2d.yaml'
 
     # 检查数据路径
-    data_path = './data/Ottawa_Bearing_Dataset'
+    data_path = '/root/data/Ottawa_Bearing_Dataset'
     if not os.path.exists(data_path):
         print(f"❌ 数据路径不存在: {data_path}")
         print("请下载渥太华轴承数据集并放入该目录")
