@@ -183,58 +183,57 @@ class EpisodeDataLoader:
         self.labels = dataset.labels
         self.domains = dataset.domain_labels
 
-    def generate_episode(self) -> Tuple[torch.Tensor, torch.Tensor,
-    torch.Tensor, torch.Tensor]:
+    def generate_episode(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """生成一个episode：支持集+查询集"""
 
-        # 随机选择n_way个类别
         unique_labels = np.unique(self.labels)
-        selected_labels = np.random.choice(unique_labels, self.n_way,
-                                           replace=False)
 
-        # 每个域中每类采样
-        support_data = []
-        support_labels = []
-        query_data = []
-        query_labels = []
+        # 动态调整 n_way
+        actual_n_way = min(self.n_way, len(unique_labels))
 
-        for domain in np.unique(self.domains):
-            domain_mask = self.domains == domain
-            domain_data = self.dataset.data[domain_mask]
-            domain_labels = self.labels[domain_mask]
+        if actual_n_way < self.n_way:
+            print(f"⚠️  Warning: Only {len(unique_labels)} classes available. "
+                  f"Using {actual_n_way}-way instead of {self.n_way}-way.")
 
-            for label_idx, label in enumerate(selected_labels):
-                # 获取该类在该域中的数据
-                label_mask = domain_labels == label
-                class_data = domain_data[label_mask]
+        # 随机选择类别
+        selected_labels = np.random.choice(unique_labels, actual_n_way, replace=False)
 
-                if len(class_data) < self.k_shot + self.n_query:
-                    continue
+        # 收集支持集和查询集
+        support_data_list = []
+        support_labels_list = []
+        query_data_list = []
+        query_labels_list = []
 
-                # 随机打乱并分割
-                indices = np.random.permutation(len(class_data))
-                class_data = class_data[indices]
+        for label_idx, true_label in enumerate(selected_labels):
+            # 获取该类所有数据
+            label_mask = self.labels == true_label
+            class_data = self.dataset.data[label_mask]
 
-                # 支持集
-                support_data.append(class_data[:self.k_shot])
-                support_labels.extend([label_idx] * self.k_shot)
+            if len(class_data) < self.k_shot + self.n_query:
+                # 如果样本不足，重复采样
+                indices = np.random.choice(len(class_data), self.k_shot + self.n_query, replace=True)
+            else:
+                indices = np.random.choice(len(class_data), self.k_shot + self.n_query, replace=False)
 
-                # 查询集
-                query_data.append(class_data[self.k_shot:self.k_shot + self.n_query])
-                query_labels.extend([label_idx] * self.n_query)
+            selected_samples = class_data[indices]
 
-        if not support_data:
-            raise ValueError("无法生成episode，请调整k_shot和n_query参数")
+            # 支持集
+            support_data_list.append(selected_samples[:self.k_shot])
+            support_labels_list.extend([label_idx] * self.k_shot)
+
+            # 查询集
+            query_data_list.append(selected_samples[self.k_shot:])
+            query_labels_list.extend([label_idx] * self.n_query)
 
         # 转换为tensor
-        support_data = torch.FloatTensor(np.vstack(support_data))
-        support_labels = torch.LongTensor(support_labels)
-        query_data = torch.FloatTensor(np.vstack(query_data))
-        query_labels = torch.LongTensor(query_labels)
+        support_data = torch.FloatTensor(np.vstack(support_data_list))
+        support_labels = torch.LongTensor(support_labels_list)
+        query_data = torch.FloatTensor(np.vstack(query_data_list))
+        query_labels = torch.LongTensor(query_labels_list)
 
-        # 增加通道维度
-        support_data = support_data.unsqueeze(1)  # [N, 1, window_size]
-        query_data = query_data.unsqueeze(1)  # [N, 1, window_size]
+        # 增加通道维度 [N, 1, L]
+        support_data = support_data.unsqueeze(1)
+        query_data = query_data.unsqueeze(1)
 
         return support_data, support_labels, query_data, query_labels
 
