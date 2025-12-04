@@ -286,47 +286,47 @@ class FSDGContinualPipeline:
         return results
 
 
-def evaluate_episode(self, support_set, query_set):
-    """评估单个episode"""
-    with torch.no_grad():
-        support_x = support_set['x'].to(self.device)
-        support_y = support_set['y'].to(self.device)
-        query_x = query_set['x'].to(self.device)
-        query_y = query_set['y'].to(self.device)
+    def evaluate_episode(self, support_set, query_set):
+        """评估单个episode"""
+        with torch.no_grad():
+            support_x = support_set['x'].to(self.device)
+            support_y = support_set['y'].to(self.device)
+            query_x = query_set['x'].to(self.device)
+            query_y = query_set['y'].to(self.device)
 
-        support_feat = self.backbone(support_x)
-        query_feat = self.backbone(query_x)
+            support_feat = self.backbone(support_x)
+            query_feat = self.backbone(query_x)
 
-        prototypes = self.prototype_head.compute_prototypes(support_feat, support_y)
-        logits = self.prototype_head(query_feat, prototypes)
+            prototypes = self.prototype_head.compute_prototypes(support_feat, support_y)
+            logits = self.prototype_head(query_feat, prototypes)
 
-        acc = self.metrics.accuracy(logits, query_y)
-        return acc
-
-
-def save_checkpoint(self, domain_idx):
-    """保存检查点"""
-    checkpoint_path = f"{self.config['OUTPUT']['model_path']}_domain_{domain_idx}.pt"
-    torch.save({
-        'backbone': self.backbone.state_dict(),
-        'prototype_head': self.prototype_head.state_dict(),
-        'memory_buffer': self.memory_buffer,
-        'optimizer': self.optimizer.state_dict(),
-        'config': self.config
-    }, checkpoint_path)
-    print(f"💾 检查点已保存: {checkpoint_path}")
+            acc = self.metrics.accuracy(logits, query_y)
+            return acc
 
 
-def save_final_model(self):
-    """保存最终模型"""
-    torch.save({
-        'backbone': self.backbone.state_dict(),
-        'prototype_head': self.prototype_head.state_dict(),
-        'memory_buffer': self.memory_buffer,
-        'optimizer': self.optimizer.state_dict(),
-        'config': self.config
-    }, self.config['OUTPUT']['model_path'])
-    print(f"✅ 最终模型已保存: {self.config['OUTPUT']['model_path']}")
+    def save_checkpoint(self, domain_idx):
+        """保存检查点"""
+        checkpoint_path = f"{self.config['OUTPUT']['model_path']}_domain_{domain_idx}.pt"
+        torch.save({
+            'backbone': self.backbone.state_dict(),
+            'prototype_head': self.prototype_head.state_dict(),
+            'memory_buffer': self.memory_buffer,
+            'optimizer': self.optimizer.state_dict(),
+            'config': self.config
+        }, checkpoint_path)
+        print(f"💾 检查点已保存: {checkpoint_path}")
+
+
+    def save_final_model(self):
+        """保存最终模型"""
+        torch.save({
+            'backbone': self.backbone.state_dict(),
+            'prototype_head': self.prototype_head.state_dict(),
+            'memory_buffer': self.memory_buffer,
+            'optimizer': self.optimizer.state_dict(),
+            'config': self.config
+        }, self.config['OUTPUT']['model_path'])
+        print(f"✅ 最终模型已保存: {self.config['OUTPUT']['model_path']}")
 
 
 def main():
