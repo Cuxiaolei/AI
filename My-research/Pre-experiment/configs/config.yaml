@@ -1,6 +1,6 @@
 # 数据配置
 data:
-  root_dir: "./data/Ottawa_Bearing_Dataset"
+  root_dir: "/root/data/Ottawa_Bearing_Dataset"
   sampling_rate: 200000  # 采样频率 200kHz
   window_size: 2048      # 样本窗口大小
   overlap: 0.5           # 重叠率
