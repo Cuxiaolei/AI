@@ -1,15 +1,10 @@
 #!/bin/bash
-# 一键运行完整实验
 
-echo "开始2D-ResNet小样本域泛化实验"
+# 设置Python路径
+export PYTHONPATH="./:$PYTHONPATH"
 
-echo "⏱️  开始训练"
+# 开始训练（使用 -m 参数）
+echo "Starting training..."
+python -m main --mode continual --config configs/config.yaml --save_dir ./outputs
 
-# 步骤1：快速验证
-python main.py --mode train --epochs 10 --save_dir ./debug
-
-# 步骤2：核心训练
-python main.py --mode continual --save_dir ./exp_main
-
-# 步骤3：最终评估
-python main.py --mode test --resume ./exp_main/best_model.pth --save_dir ./exp_final
+echo "Training completed!"
