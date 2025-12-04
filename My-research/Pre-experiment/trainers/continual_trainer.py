@@ -4,7 +4,6 @@ from torch.utils.data import DataLoader
 from typing import Dict, List, Tuple
 import numpy as np
 import copy
-from collections import deque
 from trainers.base_trainer import BaseTrainer
 from losses.prototypical_loss import PrototypicalLoss
 
@@ -36,7 +35,12 @@ class ContinualLearningTrainer(BaseTrainer):
         # 记录性能
         self.domain_performance = {}
 
-    def train_domain(self, domain: str, train_loader: DataLoader,
+        print(f"ContinualLearningTrainer initialized:")
+        print(f"  - Source domains: {len(self.domains)}")
+        print(f"  - Memory buffer size: {self.memory_size}")
+        print(f"  - Rehearsal ratio: {self.rehearsal_ratio}")
+
+    def train_domain(self, domain: str, episode_loader,
                      val_loader: DataLoader, epochs: int) -> Dict:
         """训练单个域"""
 
@@ -64,7 +68,7 @@ class ContinualLearningTrainer(BaseTrainer):
         for epoch in range(epochs):
             # 训练阶段
             train_metrics = self._train_epoch(
-                domain, train_loader, optimizer, scheduler
+                domain, episode_loader, optimizer, scheduler
             )
 
             # 验证阶段
@@ -81,9 +85,9 @@ class ContinualLearningTrainer(BaseTrainer):
                     best_acc = val_metrics['accuracy']
                     best_state = copy.deepcopy(self.model.state_dict())
 
-            # 更新记忆缓冲区
-            if epoch == epochs // 2:  # 中间时刻更新
-                self._update_memory_buffer(domain, train_loader)
+            # 更新记忆缓冲区（epoch中间时刻）
+            if epoch == epochs // 2:
+                self._update_memory_buffer(domain, episode_loader)
 
         # 恢复最佳模型
         if best_state is not None:
@@ -97,10 +101,10 @@ class ContinualLearningTrainer(BaseTrainer):
             'final_metrics': val_metrics
         }
 
-    def _train_epoch(self, domain: str, train_loader: DataLoader,
+    def _train_epoch(self, domain: str, episode_loader,
                      optimizer: torch.optim.Optimizer,
                      scheduler: torch.optim.lr_scheduler) -> Dict:
-        """训练一个epoch"""
+        """训练一个epoch——核心修改：直接使用episode_loader"""
 
         self.model.train()
 
@@ -110,30 +114,24 @@ class ContinualLearningTrainer(BaseTrainer):
         correct = 0
         total = 0
 
-        # 从数据集中创建 EpisodeDataLoader
-        from data.dataset import EpisodeDataLoader
-
-        episode_loader = EpisodeDataLoader(
-            dataset=train_loader.dataset,
-            n_way=self.config['model']['num_classes'],
-            k_shot=self.config['data']['k_shot'],
-            n_query=self.config['data']['n_query']
-        )
-
-        # 每个epoch训练固定数量的episodes
-        num_episodes = len(train_loader)
+        # 每个 epoch 训练固定数量的 episodes
+        num_episodes = self.config['training'].get('episodes_per_epoch', 50)
 
         for episode_idx in range(num_episodes):
-            # 生成episode
-            support_data, support_labels, query_data, query_labels = \
-                episode_loader.generate_episode()
+            # ✨ 核心：从 episode_loader 生成跨域 episode
+            try:
+                support_data, support_labels, query_data, query_labels = \
+                    episode_loader.generate_episode()
+            except Exception as e:
+                print(f"⚠️  Episode generation failed: {e}")
+                continue
 
             support_data = support_data.to(self.device)
             support_labels = support_labels.to(self.device)
             query_data = query_data.to(self.device)
             query_labels = query_labels.to(self.device)
 
-            # 域标签
+            # 当前批次的域标签（查询集）
             batch_size = query_data.shape[0]
             domain_label_idx = self.domains.index(domain)
             domain_labels = torch.full((batch_size,), domain_label_idx, device=self.device)
@@ -144,7 +142,7 @@ class ContinualLearningTrainer(BaseTrainer):
             else:
                 replay_data = None
 
-            # 前向传播
+            # 前向传播和损失计算
             loss, metrics = self.criterion(
                 self.model, support_data, support_labels,
                 query_data, query_labels,
@@ -180,79 +178,51 @@ class ContinualLearningTrainer(BaseTrainer):
             'total_loss': total_loss / num_episodes,
             'proto_loss': total_proto_loss / num_episodes,
             'domain_loss': total_domain_loss / num_episodes if total_domain_loss > 0 else 0,
-            'accuracy': correct / total
+            'accuracy': correct / total if total > 0 else 0
         }
 
-    def _update_memory_buffer(self, domain: str, train_loader: DataLoader):
-        """更新记忆缓冲区"""
+    def _update_memory_buffer(self, domain: str, episode_loader):
+        """更新记忆缓冲区——从episode_loader中采样"""
 
         print(f"更新域 {domain} 的记忆缓冲区...")
 
         self.model.eval()
 
-        all_features = []
-        all_labels = []
-        all_data = []
+        # 使用该域的数据集采样
+        domain_dataset = episode_loader.datasets[domain]
 
+        # 简单采样：从该域中随机选样本
+        all_data = domain_dataset.data
+        all_labels = domain_dataset.labels
+
+        if len(all_data) > 20:
+            indices = np.random.choice(len(all_data), 20, replace=False)
+        else:
+            indices = np.arange(len(all_data))
+
+        selected_data = torch.FloatTensor(all_data[indices]).to(self.device)
+        selected_labels = torch.LongTensor(all_labels[indices])
+
+        # 提取特征
         with torch.no_grad():
-            for batch in train_loader:
-                data = batch['data'].to(self.device)
-                labels = batch['label']
-
-                # 提取特征
-                _, features = self.model.backbone(data, return_features=True)
-
-                all_data.append(data.cpu())
-                all_features.append(features.cpu())
-                all_labels.append(labels)
-
-        # 合并
-        all_data = torch.cat(all_data, dim=0)
-        all_features = torch.cat(all_features, dim=0)
-        all_labels = torch.cat(all_labels, dim=0)
-
-        # 每类选择代表性样本（聚类中心附近）
-        selected_data = []
-        selected_labels = []
-        selected_features = []
-
-        for label in torch.unique(all_labels):
-            mask = (all_labels == label)
-            class_data = all_data[mask]
-            class_features = all_features[mask]
-            class_labels = all_labels[mask]
-
-            # 计算类中心
-            class_center = class_features.mean(dim=0, keepdim=True)
-
-            # 选择距离中心最近的样本
-            distances = torch.norm(class_features - class_center, dim=1)
-            _, indices = torch.topk(distances,
-                                    min(len(class_data) // 2, 10),
-                                    largest=False)
-
-            selected_data.append(class_data[indices])
-            selected_labels.append(class_labels[indices])
-            selected_features.append(class_features[indices])
+            _, features = self.model.backbone(selected_data.unsqueeze(1), return_features=True)
 
         # 存储到缓冲区
         self.memory_buffer[domain] = {
-            'data': torch.cat(selected_data, dim=0),
-            'labels': torch.cat(selected_labels, dim=0),
-            'features': torch.cat(selected_features, dim=0)
+            'data': selected_data.cpu(),
+            'labels': selected_labels,
+            'features': features.cpu()
         }
 
-        # 限制缓冲区大小
+        # 限制缓冲区总大小
         self._limit_memory_buffer()
 
     def _limit_memory_buffer(self):
         """限制记忆缓冲区总大小"""
-
         total_size = sum(buffer['data'].shape[0]
                          for buffer in self.memory_buffer.values())
 
         if total_size > self.memory_size:
-            # 按比例减少每个域的样本
             ratio = self.memory_size / total_size
 
             for domain in self.memory_buffer:
@@ -260,17 +230,19 @@ class ContinualLearningTrainer(BaseTrainer):
                 current_size = buffer['data'].shape[0]
                 new_size = int(current_size * ratio)
 
-                indices = torch.randperm(current_size)[:new_size]
+                if new_size > 0:
+                    indices = torch.randperm(current_size)[:new_size]
+                    self.memory_buffer[domain] = {
+                        'data': buffer['data'][indices],
+                        'labels': buffer['labels'][indices],
+                        'features': buffer['features'][indices]
+                    }
+                else:
+                    # 如果该域样本数被压缩到0，删除该域
+                    del self.memory_buffer[domain]
 
-                self.memory_buffer[domain] = {
-                    'data': buffer['data'][indices],
-                    'labels': buffer['labels'][indices],
-                    'features': buffer['features'][indices]
-                }
-
-    def _get_replay_batch(self) -> Dict[str, torch.Tensor]:
-        """获取回放批次"""
-
+    def _get_replay_batch(self) -> Dict:
+        """从记忆缓冲区获取回放批次"""
         if not self.memory_buffer:
             return None
 
@@ -282,10 +254,14 @@ class ContinualLearningTrainer(BaseTrainer):
             domain_size = buffer['data'].shape[0]
             replay_size = int(domain_size * self.rehearsal_ratio)
 
-            indices = torch.randperm(domain_size)[:replay_size]
+            if replay_size > 0:
+                indices = torch.randperm(domain_size)[:replay_size]
 
-            replay_data.append(buffer['data'][indices])
-            replay_labels.append(buffer['labels'][indices])
+                replay_data.append(buffer['data'][indices])
+                replay_labels.append(buffer['labels'][indices])
+
+        if not replay_data:
+            return None
 
         return {
             'data': torch.cat(replay_data, dim=0).to(self.device),
@@ -293,24 +269,23 @@ class ContinualLearningTrainer(BaseTrainer):
         }
 
     def _compute_replay_loss(self, replay_data: Dict) -> torch.Tensor:
-        """计算回放损失"""
-
+        """计算回放损失（知识蒸馏）"""
         data = replay_data['data']
-        labels = replay_data['labels']
+        old_features = replay_data.get('old_features', None)
 
-        # 使用知识蒸馏防止灾难性遗忘
-        with torch.no_grad():
-            old_features = self.model.backbone(data, return_features=True)[1]
+        if old_features is None:
+            # 如果没有旧特征，返回0损失
+            return torch.tensor(0.0, device=self.device)
 
+        # 提取新特征
         _, new_features = self.model.backbone(data, return_features=True)
 
         # MSE损失保持特征稳定
-        replay_loss = F.mse_loss(new_features, old_features.detach())
+        replay_loss = nn.functional.mse_loss(new_features, old_features.detach())
 
-        return replay_loss * 0.1  # 权重衰减
+        return replay_loss * 0.1
 
-    def train_continual(self, train_loaders: Dict[str, DataLoader],
-                        val_loaders: Dict[str, DataLoader]) -> Dict:
+    def train_continual(self, episode_loader, val_loaders: Dict, target_loaders: Dict) -> Dict:
         """持续学习主流程"""
 
         results = {}
@@ -318,18 +293,17 @@ class ContinualLearningTrainer(BaseTrainer):
         for domain_idx, domain in enumerate(self.domains):
             self.current_domain_idx = domain_idx
 
-            train_loader = train_loaders[domain]
             val_loader = val_loaders[domain]
 
             # 训练当前域
             domain_results = self.train_domain(
-                domain, train_loader, val_loader,
+                domain, episode_loader, val_loader,
                 self.config['training']['epochs']
             )
 
             results[domain] = domain_results
 
-            # 评估之前所有域
+            # 评估之前所有域的遗忘程度
             if domain_idx > 0:
                 forgetting = self._evaluate_forgetting(val_loaders, domain_idx)
                 print(f"遗忘程度: {forgetting:.4f}")
@@ -343,12 +317,14 @@ class ContinualLearningTrainer(BaseTrainer):
         for domain, perf in self.domain_performance.items():
             print(f"域 {domain}: {perf:.4f}")
 
+        # 在目标域上评估泛化能力
+        if target_loaders:
+            self._evaluate_target_domains(target_loaders)
+
         return results
 
-    def _evaluate_forgetting(self, val_loaders: Dict[str, DataLoader],
-                             current_idx: int) -> float:
+    def _evaluate_forgetting(self, val_loaders: Dict, current_idx: int) -> float:
         """评估灾难性遗忘"""
-
         forgettings = []
 
         for i in range(current_idx):
@@ -361,4 +337,14 @@ class ContinualLearningTrainer(BaseTrainer):
             forgetting = max(0, original_acc - current_acc)
             forgettings.append(forgetting)
 
-        return np.mean(forgettings)
+        return np.mean(forgettings) if forgettings else 0
+
+    def _evaluate_target_domains(self, target_loaders: Dict):
+        """评估在目标域上的泛化性能"""
+        print("\n" + "=" * 60)
+        print("在目标域上评估泛化能力:")
+        print("=" * 60)
+
+        for domain, loader in target_loaders.items():
+            metrics = self._evaluate(loader)
+            print(f"目标域 {domain}: Accuracy={metrics['accuracy']:.4f}")

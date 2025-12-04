@@ -1,4 +1,6 @@
-import sys, os; sys.path.append(os.path.dirname(__file__))
+import sys, os;
+
+sys.path.append(os.path.dirname(__file__))
 
 import argparse
 import yaml
@@ -71,7 +73,10 @@ def parse_args():
 
 
 def setup_data(config: dict):
-    """设置数据加载器"""
+    """设置数据加载器——返回跨域episode_loader"""
+
+    from data.preprocessor import SignalPreprocessor
+    from data.dataset import OttawaBearingDataset, MultiDomainEpisodeLoader
 
     data_config = config['data']
 
@@ -82,34 +87,37 @@ def setup_data(config: dict):
         denoise=data_config.get('denoise', False)
     )
 
-    # 创建数据集
-    train_loaders = {}
-    val_loaders = {}
+    # 获取所有域
+    source_domains = data_config['source_domains']
+    target_domains = data_config['target_domains']
+    all_domains = source_domains + target_domains
 
-    # 源域
-    for domain in data_config['source_domains']:
-        # 训练集
-        train_dataset = OttawaBearingDataset(
+    # 为每个域创建数据集（字典形式）
+    datasets = {}
+    for domain in all_domains:
+        dataset = OttawaBearingDataset(
             data_dir=data_config['root_dir'],
             domains=[domain],
             window_size=data_config['window_size'],
             overlap=data_config['overlap'],
             channels=data_config['channels'],
-            k_shot=data_config['k_shot'],
-            n_query=data_config['n_query'],
             mode='train',
             preprocessor=preprocessor
         )
+        datasets[domain] = dataset
+        print(f"  域 {domain}: {len(dataset)} 个样本，标签 {np.unique(dataset.labels)}")
 
-        train_loaders[domain] = DataLoader(
-            train_dataset,
-            batch_size=config['training']['batch_size'],
-            shuffle=True,
-            num_workers=config['num_workers'],
-            pin_memory=True
-        )
+    # 创建跨域 EpisodeDataLoader
+    episode_loader = MultiDomainEpisodeLoader(
+        datasets={dom: datasets[dom] for dom in source_domains},  # 只包含源域用于训练
+        n_way=data_config['n_way'],
+        k_shot=data_config['k_shot'],
+        n_query=data_config['n_query']
+    )
 
-        # 验证集
+    # 创建验证集加载器（每个域单独验证）
+    val_loaders = {}
+    for domain in all_domains:
         val_dataset = OttawaBearingDataset(
             data_dir=data_config['root_dir'],
             domains=[domain],
@@ -128,28 +136,11 @@ def setup_data(config: dict):
             pin_memory=True
         )
 
-    # 目标域测试集
-    target_loaders = {}
-    for domain in data_config['target_domains']:
-        target_dataset = OttawaBearingDataset(
-            data_dir=data_config['root_dir'],
-            domains=[domain],
-            window_size=data_config['window_size'],
-            overlap=0.0,
-            channels=data_config['channels'],
-            mode='test',
-            preprocessor=preprocessor
-        )
+    # 源域和目标域验证集分开
+    train_val_loaders = {dom: val_loaders[dom] for dom in source_domains}
+    target_val_loaders = {dom: val_loaders[dom] for dom in target_domains}
 
-        target_loaders[domain] = DataLoader(
-            target_dataset,
-            batch_size=config['training']['batch_size'],
-            shuffle=False,
-            num_workers=config['num_workers'],
-            pin_memory=True
-        )
-
-    return train_loaders, val_loaders, target_loaders
+    return episode_loader, train_val_loaders, target_val_loaders
 
 
 def setup_model(config: dict):
@@ -196,7 +187,7 @@ def main():
 
     # 设置数据
     print("设置数据加载器...")
-    train_loaders, val_loaders, target_loaders = setup_data(config)
+    episode_loader, val_loaders, target_loaders = setup_data(config)
 
     # 设置模型
     print("设置模型...")
@@ -220,7 +211,8 @@ def main():
         # 训练
         if args.mode == 'continual':
             print("开始持续学习...")
-            results = trainer.train_continual(train_loaders, val_loaders)
+            # ✨ 关键修复：正确传递三个参数
+            results = trainer.train_continual(episode_loader, val_loaders, target_loaders)
 
             # 保存结果
             import json
@@ -228,10 +220,17 @@ def main():
                 json.dump(results, f, indent=2)
 
         else:
-            # 单域训练（传统方式）
+            # 单域训练（不使用episode_loader）
             domain = config['data']['source_domains'][0]
+            # 创建单域训练使用的DataLoader
+            single_loader = DataLoader(
+                episode_loader.datasets[domain],
+                batch_size=config['training']['batch_size'],
+                shuffle=True,
+                num_workers=config['num_workers']
+            )
             results = trainer.train_domain(
-                domain, train_loaders[domain], val_loaders[domain],
+                domain, single_loader, val_loaders[domain],
                 config['training']['epochs']
             )
 

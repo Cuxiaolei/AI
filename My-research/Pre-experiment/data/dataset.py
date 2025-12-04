@@ -4,12 +4,10 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import scipy.io as sio
 from typing import Dict, List, Tuple
-import pandas as pd
-from data.preprocessor import SignalPreprocessor
 
 
 class OttawaBearingDataset(Dataset):
-    """渥太华轴承数据集加载器"""
+    """渥太华轴承数据集加载器——每个域只有单一类别"""
 
     def __init__(self,
                  data_dir: str,
@@ -17,19 +15,15 @@ class OttawaBearingDataset(Dataset):
                  window_size: int = 2048,
                  overlap: float = 0.5,
                  channels: List[str] = ['Channel_1'],
-                 k_shot: int = None,
-                 n_query: int = None,
                  mode: str = 'train',
-                 preprocessor: SignalPreprocessor = None):
+                 preprocessor=None):
         """
         Args:
             data_dir: 数据集根目录
-            domains: 域列表，如 ['H-A', 'I-B']
+            domains: 域列表（每个域只包含一种健康状况）
             window_size: 滑动窗口大小
             overlap: 重叠率
             channels: 使用的通道列表
-            k_shot: 小样本k-shot数
-            n_query: 查询集数量
             mode: 'train' 或 'test'
             preprocessor: 预处理器实例
         """
@@ -38,20 +32,14 @@ class OttawaBearingDataset(Dataset):
         self.window_size = window_size
         self.overlap = overlap
         self.channels = channels
-        self.k_shot = k_shot
-        self.n_query = n_query
         self.mode = mode
-        self.preprocessor = preprocessor or SignalPreprocessor()
+        self.preprocessor = preprocessor
 
-        # 标签映射
+        # 标签映射（从文件名第一个字母提取）
         self.label_map = {'H': 0, 'I': 1, 'O': 2}
 
         # 加载数据
         self.data, self.labels, self.domain_labels = self._load_data()
-
-        # 小样本采样（如果指定）
-        if k_shot is not None and mode == 'train':
-            self.data, self.labels, self.domain_labels = self._sample_k_shot()
 
     def _load_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """加载指定域的所有数据"""
@@ -78,12 +66,14 @@ class OttawaBearingDataset(Dataset):
                             signal = mat_data[channel].flatten()
 
                             # 信号预处理
-                            signal = self.preprocessor.preprocess(signal,
-                                                                  sampling_rate=200000)
+                            if self.preprocessor:
+                                signal = self.preprocessor.preprocess(signal,
+                                                                      sampling_rate=200000)
 
                             # 滑动窗口切片
                             samples = self._slice_signal(signal)
 
+                            # 标签（从文件名第一个字母提取）
                             label = self.label_map[health]
 
                             all_data.append(samples)
@@ -112,42 +102,7 @@ class OttawaBearingDataset(Dataset):
             signal, self.window_size
         )[::step]
 
-        return samples[:num_samples]  # 确保长度一致
-
-    def _sample_k_shot(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """小样本采样：每类每域采样k个样本"""
-
-        sampled_data = []
-        sampled_labels = []
-        sampled_domains = []
-
-        unique_domains = np.unique(self.domain_labels)
-        unique_labels = np.unique(self.labels)
-
-        for domain in unique_domains:
-            domain_mask = self.domain_labels == domain
-            domain_data = self.data[domain_mask]
-            domain_labels = self.labels[domain_mask]
-            domain_domains = self.domain_labels[domain_mask]
-
-            for label in unique_labels:
-                label_mask = domain_labels == label
-                label_data = domain_data[label_mask]
-
-                # 如果样本不足k_shot，则重复采样
-                if len(label_data) < self.k_shot:
-                    indices = np.random.choice(len(label_data), self.k_shot,
-                                               replace=True)
-                else:
-                    indices = np.random.choice(len(label_data), self.k_shot,
-                                               replace=False)
-
-                sampled_data.append(label_data[indices])
-                sampled_labels.extend([label] * self.k_shot)
-                sampled_domains.extend([domain] * self.k_shot)
-
-        return np.vstack(sampled_data), np.array(sampled_labels), \
-            np.array(sampled_domains)
+        return samples[:num_samples]
 
     def __len__(self) -> int:
         return len(self.data)
@@ -170,89 +125,105 @@ class OttawaBearingDataset(Dataset):
         }
 
 
-class EpisodeDataLoader:
-    """用于小样本学习的Episode数据加载器"""
+class MultiDomainEpisodeLoader:
+    """跨域Episode数据加载器——核心修改：从不同域采样不同类别"""
 
-    def __init__(self, dataset: OttawaBearingDataset,
-                 n_way: int, k_shot: int, n_query: int):
-        self.dataset = dataset
+    def __init__(self,
+                 datasets: Dict[str, OttawaBearingDataset],
+                 n_way: int = 3,
+                 k_shot: int = 5,
+                 n_query: int = 15):
+        """
+        Args:
+            datasets: 域数据集字典，{domain_name: dataset}
+            n_way: 每episode的类别数
+            k_shot: 支持集样本数
+            n_query: 查询集样本数
+        """
+        self.datasets = datasets
         self.n_way = n_way
         self.k_shot = k_shot
         self.n_query = n_query
 
-        self.labels = dataset.labels
-        self.domains = dataset.domain_labels
+        # 按健康状况分组域（H开头的域，I开头的域，O开头的域）
+        self.health_domains = {
+            'H': [dom for dom in datasets.keys() if dom.startswith('H-')],
+            'I': [dom for dom in datasets.keys() if dom.startswith('I-')],
+            'O': [dom for dom in datasets.keys() if dom.startswith('O-')]
+        }
+
+        # 健康状态到标签的映射
+        self.health_label_map = {'H': 0, 'I': 1, 'O': 2}
+
+        print(f"Episode loader initialized with:")
+        print(f"  - H domains: {len(self.health_domains['H'])}")
+        print(f"  - I domains: {len(self.health_domains['I'])}")
+        print(f"  - O domains: {len(self.health_domains['O'])}")
 
     def generate_episode(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """生成一个episode：支持集+查询集"""
+        """
+        生成跨域episode：从不同域采样不同类别
+        例如：从H-A域采样健康样本，从I-B域采样内圈故障样本
+        """
 
-        unique_labels = np.unique(self.labels)
-
-        # 动态调整 n_way
-        actual_n_way = min(self.n_way, len(unique_labels))
+        # 选择n_way个类别（从H, I, O中选）
+        available_healths = list(self.health_domains.keys())
+        actual_n_way = min(self.n_way, len(available_healths))
 
         if actual_n_way < self.n_way:
-            print(f"⚠️  Warning: Only {len(unique_labels)} classes available. "
+            print(f"⚠️  Warning: Only {len(available_healths)} health states available. "
                   f"Using {actual_n_way}-way instead of {self.n_way}-way.")
 
-        # 随机选择类别
-        selected_labels = np.random.choice(unique_labels, actual_n_way, replace=False)
+        selected_healths = np.random.choice(available_healths, actual_n_way, replace=False)
 
-        # 收集支持集和查询集
-        support_data_list = []
-        support_labels_list = []
-        query_data_list = []
-        query_labels_list = []
+        support_data = []
+        support_labels = []
+        query_data = []
+        query_labels = []
 
-        for label_idx, true_label in enumerate(selected_labels):
-            # 获取该类所有数据
-            label_mask = self.labels == true_label
-            class_data = self.dataset.data[label_mask]
+        for label_idx, health in enumerate(selected_healths):
+            # 为该类别随机选择一个域（如H-A, H-B, H-C, H-D中的一个）
+            domain_list = self.health_domains[health]
+            if not domain_list:
+                print(f"⚠️  Warning: No domains available for health state {health}")
+                continue
 
-            if len(class_data) < self.k_shot + self.n_query:
+            selected_domain = np.random.choice(domain_list)
+            dataset = self.datasets[selected_domain]
+
+            # 从该域中采样支持集和查询集（所有样本都是同一健康状态）
+            data = dataset.data
+
+            if len(data) < self.k_shot + self.n_query:
                 # 如果样本不足，重复采样
-                indices = np.random.choice(len(class_data), self.k_shot + self.n_query, replace=True)
+                indices = np.random.choice(len(data), self.k_shot + self.n_query, replace=True)
             else:
-                indices = np.random.choice(len(class_data), self.k_shot + self.n_query, replace=False)
+                # 不重复采样
+                indices = np.random.choice(len(data), self.k_shot + self.n_query, replace=False)
 
-            selected_samples = class_data[indices]
+            selected_samples = data[indices]
 
-            # 支持集
-            support_data_list.append(selected_samples[:self.k_shot])
-            support_labels_list.extend([label_idx] * self.k_shot)
+            # 支持集（label_idx是episode内的类别索引，不是真实的健康标签）
+            support_data.append(selected_samples[:self.k_shot])
+            support_labels.extend([label_idx] * self.k_shot)
 
             # 查询集
-            query_data_list.append(selected_samples[self.k_shot:])
-            query_labels_list.extend([label_idx] * self.n_query)
+            query_data.append(selected_samples[self.k_shot:])
+            query_labels.extend([label_idx] * self.n_query)
 
         # 转换为tensor
-        support_data = torch.FloatTensor(np.vstack(support_data_list))
-        support_labels = torch.LongTensor(support_labels_list)
-        query_data = torch.FloatTensor(np.vstack(query_data_list))
-        query_labels = torch.LongTensor(query_labels_list)
+        support_data = torch.FloatTensor(np.vstack(support_data))
+        support_labels = torch.LongTensor(support_labels)
+        query_data = torch.FloatTensor(np.vstack(query_data))
+        query_labels = torch.LongTensor(query_labels)
 
-        # 增加通道维度 [N, 1, L]
+        # 增加通道维度 [N, 1, window_size]
         support_data = support_data.unsqueeze(1)
         query_data = query_data.unsqueeze(1)
 
+        # 打印episode信息（调试用）
+        if hasattr(self, 'debug') and self.debug:
+            print(f"Episode generated: {len(support_data)} support, {len(query_data)} query, "
+                  f"{actual_n_way}-way, domains: {selected_healths}")
+
         return support_data, support_labels, query_data, query_labels
-
-
-# 测试代码
-if __name__ == "__main__":
-    data_dir = "./data/Ottawa_Bearing_Dataset"
-
-    # 创建数据集
-    domains = ['H-A', 'I-A', 'O-A']
-    dataset = OttawaBearingDataset(data_dir, domains, k_shot=5)
-
-    print(f"数据集大小: {len(dataset)}")
-    print(f"数据形状: {dataset.data.shape}")
-    print(f"标签分布: {np.unique(dataset.labels, return_counts=True)}")
-
-    # 创建episode loader
-    episode_loader = EpisodeDataLoader(dataset, n_way=3, k_shot=5, n_query=15)
-    support_data, support_labels, query_data, query_labels = episode_loader.generate_episode()
-
-    print(f"支持集形状: {support_data.shape}")
-    print(f"查询集形状: {query_data.shape}")
