@@ -1,23 +1,24 @@
 # 数据配置
 data:
-  root_dir: "/root/data/Ottawa_Bearing_Dataset"
+  root_dir: "./data/Ottawa_Bearing_Dataset"
   sampling_rate: 200000  # 采样频率 200kHz
   window_size: 2048      # 样本窗口大小
   overlap: 0.5           # 重叠率
   channels: ['Channel_1'] # 使用振动通道
 
+  # 小样本配置
+  n_way: 3              # ✨ 类别数（健康、内圈缺陷、外圈缺陷）
+  k_shot: 5             # ✨ 每个类别的支持样本数
+  n_query: 15           # ✨ 每个类别的查询样本数
+
   # DA域泛化配置
   source_domains: ['H-A', 'H-B', 'I-A', 'I-B', 'O-A', 'O-B']  # 源域
   target_domains: ['H-C', 'H-D', 'I-C', 'I-D', 'O-C', 'O-D']  # 目标域
 
-  # 小样本配置
-  k_shot: 5              # 每类样本数
-  n_query: 15            # 查询集数量
-
 # 模型配置
 model:
   backbone: "resnet18_1d"  # 1D ResNet
-  num_classes: 3          # H, I, O
+  num_classes: 3          # 类别数（与n_way保持一致）
   feature_dim: 512        # 特征维度
   freeze_bn: false        # 是否冻结BN层
 
@@ -38,6 +39,7 @@ training:
   # 持续学习配置
   memory_size: 500        # 记忆回放缓冲区大小
   rehearsal_ratio: 0.3    # 回放比例
+  episodes_per_epoch: 50  # 每轮训练的episode数量
 
 # 评估配置
 evaluation:
