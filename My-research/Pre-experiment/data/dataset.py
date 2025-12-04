@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import scipy.io as sio
 from typing import Dict, List, Tuple
 import pandas as pd
-from .preprocessor import SignalPreprocessor
+from data.preprocessor import SignalPreprocessor
 
 
 class OttawaBearingDataset(Dataset):

@@ -6,7 +6,7 @@ import numpy as np
 import copy
 from collections import deque
 from trainers.base_trainer import BaseTrainer
-from ..losses.prototypical_loss import PrototypicalLoss
+from losses.prototypical_loss import PrototypicalLoss
 
 
 class ContinualLearningTrainer(BaseTrainer):
