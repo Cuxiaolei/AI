@@ -11,8 +11,8 @@ import torch.nn as nn
 class CNNBackbone(nn.Module):
     """统一接口：2D-ResNet"""
 
-    def __init__(self, feature_dim=128, target_size=64, pretrained=True):
-        super().__init__()
+    def __init__(self, feature_dim=128, target_size=128, pretrained=True):
+        super(CNNBackbone, self).__init__()
         self.backbone = ResNet2DAdapter(
             pretrained=pretrained,
             feature_dim=feature_dim,
