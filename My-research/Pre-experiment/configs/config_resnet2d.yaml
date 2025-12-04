@@ -1,6 +1,6 @@
 # 渥太华轴承数据集2D-ResNet配置 - 小样本域泛化版
 DATA:
-  path: './data/Ottawa_Bearing_Dataset'  # 使用相对路径
+  path: '/root/data/Ottawa_Bearing_Dataset'  # 使用相对路径
   window_size: 2048
   overlap: 0.75  # 增大重叠以扩充样本量
   target_size: 128  # 增大时频图尺寸保留更多信息
