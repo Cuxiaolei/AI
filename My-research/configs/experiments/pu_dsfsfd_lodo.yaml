@@ -1,0 +1,30 @@
+seed: 2025
+device: cuda
+
+data:
+  root: data/pu/pu_DSFSFD
+  train_domain: N09_M07_F10
+  test_domain:  N15_M01_F10
+
+train:
+  repeat: 3
+  epochs: 50
+  episodes: 100
+  lr: 1.0e-3
+  ft_lr: 1.0e-3
+  save_every: 10
+
+task:
+  k_train: 5
+  n_train: 5
+  q_train: 15
+  k_val: 5
+  n_val: 5
+  q_val: 15
+
+test:
+  iters: 500
+
+output:
+  base_dir: outputs
+  exp_name: pu_dsfsfd_lodo
