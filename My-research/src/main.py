@@ -69,7 +69,7 @@ def main(argv: List[str] | None = None):
 
     # 3) dispatch：按模型名进入对应 trainer
     if merged["model"]["name"] == "dsfsfd":
-        from engine.dsfsfd_trainer import run as run_dsfsfd
+        from .engine.dsfsfd_trainer import run as run_dsfsfd
         run_dsfsfd(merged, project_root)
     else:
         raise NotImplementedError(f"Unknown model.name={merged['model']['name']} (目前只接入了 dsfsfd)。")
