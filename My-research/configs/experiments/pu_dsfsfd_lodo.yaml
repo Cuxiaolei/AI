@@ -1,6 +1,9 @@
 seed: 2025
 device: cuda
 
+model:
+  name: dsfsfd
+
 data:
   root: data/pu/pu_DSFSFD
   train_domain: N09_M07_F10
