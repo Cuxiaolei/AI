@@ -1,2 +1,0 @@
-pyuic5 -o ui_ainex.py ui_ainex.ui
-pyuic5 -o ui_ainexpro.py ui_ainexpro.ui
