@@ -19,6 +19,20 @@ from ..models.backbones.dsfsfd.loss import Fusion_loss
 from ..data.samplers.Data_Sampler_dsfsfd import TrainSampler, TestSampler
 
 
+def make_unique_exp_dir(base_dir: Path, exp_name: str) -> Path:
+    """
+    base_dir/exp_name 若存在，则返回 base_dir/exp_name_1, _2, ...
+    """
+    base_dir.mkdir(parents=True, exist_ok=True)
+    cand = base_dir / exp_name
+    if not cand.exists():
+        return cand
+    for i in range(1, 10000):
+        cand_i = base_dir / f"{exp_name}_{i}"
+        if not cand_i.exists():
+            return cand_i
+    raise RuntimeError(f"Too many existing experiment folders for name={exp_name}")
+
 def setup_logger(log_file: Path) -> logging.Logger:
     log_file.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(f"dsfsfd_{log_file.parent.name}")
@@ -242,7 +256,16 @@ def build_opt_from_cfg(cfg: dict, project_root: Path) -> SimpleNamespace:
 
     out_base = (project_root / cfg["output"]["base_dir"]).resolve()
     exp_name = cfg["output"]["exp_name"]
-    opt.base_dir = str(out_base / exp_name)
+    auto_inc = bool(cfg.get("output", {}).get("auto_increment", True))
+    exp_dir = (out_base / exp_name)
+    if auto_inc:
+        exp_dir = make_unique_exp_dir(out_base, exp_name)
+    else:
+        exp_dir.mkdir(parents=True, exist_ok=True)
+    opt.base_dir = str(exp_dir)
+    # 可选：把最终实际使用的 exp_name 记录下来（日志/保存 config 时更清楚）
+    opt.exp_dir_name = exp_dir.name
+
 
     opt.repeat = int(cfg["train"].get("repeat", 1))
     opt.seed = int(cfg.get("seed", 2025))
@@ -254,6 +277,7 @@ def run(cfg: dict, project_root: Path):
     opt = build_opt_from_cfg(cfg, project_root)
 
     base_dir = Path(opt.base_dir)
+    print(f"[Output] Using experiment dir: {base_dir}")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     # 记录 cfg

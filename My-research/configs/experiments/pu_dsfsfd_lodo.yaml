@@ -15,6 +15,6 @@ task:
   q_val: 15
 
 
+# 输出文件夹，路径已经在base.yaml中配置
 output:
-  base_dir: /root/model/AI/My-research/outputs
   exp_name: pu_dsfsfd_lodo
