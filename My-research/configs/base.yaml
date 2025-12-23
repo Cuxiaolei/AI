@@ -1,0 +1,18 @@
+# configs/base.yaml
+seed: 2025
+device: cuda
+
+
+train:
+  repeat: 1
+  epochs: 50
+  episodes: 100
+  lr: 1.0e-3
+  ft_lr: 1.0e-3
+
+  save_every: 10             # checkpoint 保存频率
+  log_every: 10              # DSFSFD：每多少 episode 打一次日志
+
+
+test:
+  iters: 500
