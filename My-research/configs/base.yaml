@@ -19,5 +19,5 @@ test:
 
 # 输出路径
 output:
-  base_dir: /root/model/AI/My-research/outputs
+  base_dir: /root/outputs
   auto_increment: true
