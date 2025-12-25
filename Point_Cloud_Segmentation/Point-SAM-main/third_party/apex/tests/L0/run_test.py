@@ -2,13 +2,13 @@
 
 How to run this script?
 
-1. Run all the tests: `python /path/to/apex/tests/L0/run_test.py` If you want an xml report,
-    pass `--xml-report`, i.e. `python /path/to/apex/tests/L0/run_test.py --xml-report` and
+1. Run all the tests: `python /path/to/apex/tests/L0/run_dsfsfd_test.py` If you want an xml report,
+    pass `--xml-report`, i.e. `python /path/to/apex/tests/L0/run_dsfsfd_test.py --xml-report` and
     the file is created in `/path/to/apex/tests/L0`.
 2. Run one of the tests (e.g. fused layer norm):
-    `python /path/to/apex/tests/L0/run_test.py --include run_fused_layer_norm`
+    `python /path/to/apex/tests/L0/run_dsfsfd_test.py --include run_fused_layer_norm`
 3. Run two or more of the tests (e.g. optimizers and fused layer norm):
-    `python /path/to/apex/tests/L0/run_test.py --include run_optimizers run_fused_layer_norm`
+    `python /path/to/apex/tests/L0/run_dsfsfd_test.py --include run_optimizers run_fused_layer_norm`
 """
 import argparse
 import os

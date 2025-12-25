@@ -31,7 +31,7 @@ def load_yaml(path: Path) -> Dict[str, Any]:
 
 def main(argv: List[str] | None = None):
     parser = argparse.ArgumentParser("My-research training entry")
-    # 支持多个配置叠加：python run.py --config configs/base.yaml configs/experiments/pu_dsfsfd_lodo.yaml
+    # 支持多个配置叠加：python run.py --config configs/base.yaml configs/experiments/xxx.yaml
     parser.add_argument(
         "--config",
         nargs="+",
@@ -43,7 +43,7 @@ def main(argv: List[str] | None = None):
     # project root: <root>/src/main.py -> parents[1] is <root>
     project_root = Path(__file__).resolve().parents[1]
 
-    # 确保 src 可 import（run.py 已经做了，这里再保险一次）
+    # 确保 project_root 可 import（run.py 已经做了，这里再保险一次）
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
@@ -67,9 +67,22 @@ def main(argv: List[str] | None = None):
     # 合并顺序：先 model_cfg，再让用户传入的 cfg 覆盖（用户配置优先）
     merged = deep_update(model_cfg, cfg)
 
-    # 3) dispatch：按模型名进入对应 trainer
-    if merged["model"]["name"] == "dsfsfd":
+    # 3) dispatch：按模型名进入对应 trainer（注意必须用 if/elif/else）
+    name = merged.get("model", {}).get("name", None)
+    if name == "dsfsfd":
         from .engine.dsfsfd_trainer import run as run_dsfsfd
         run_dsfsfd(merged, project_root)
+
+    elif name == "pcdg":
+        from .engine.pcdg_trainer import run as run_pcdg
+        run_pcdg(merged, project_root)
+
     else:
-        raise NotImplementedError(f"Unknown model.name={merged['model']['name']} (目前只接入了 dsfsfd)。")
+        raise NotImplementedError(
+            f"Unknown model.name={name}. "
+            f"请确保 configs/model/{name}.yaml 存在，并且 trainer 已在 src/engine/ 下实现并接入 main.py"
+        )
+
+
+if __name__ == "__main__":
+    main()
