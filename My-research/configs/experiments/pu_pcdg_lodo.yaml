@@ -1,20 +1,19 @@
+model:
+  name: pcdg
+
 experiment:
-  mode: pcdg
+  mode: lodo      # ✅ 这里是实验模式，不是模型名
   repeats: 1
 
 data:
-  # 这里指向你预处理后目录：data/pu/pu_DSFSFD/
   root: data/pu/pu_DSFSFD
 
-  # 4 个工况域
   domains:
     - N15_M07_F10
     - N09_M07_F10
     - N15_M01_F10
     - N15_M07_F04
 
-  # 你预处理时选的 10 类（顺序=全局 class_id）
-  # 建议直接把 meta/selected_classes.json 里的列表粘贴过来，保持一致
   class_names:
     - K001
     - KA01
@@ -29,7 +28,7 @@ data:
 
   normalize:
     enable: true
-    mode: concat_zscore   # 模仿 DSFSFD：time+fft 拼一起做 zscore
+    mode: concat_zscore
 
   tf:
     size: 224
