@@ -1,0 +1,21 @@
+BASE: ../pu_config.yaml
+
+# 任务12：1，2，3 -> 0 -> 0
+split:
+  # 源域工况
+  source_conditions:
+    - "N15_M01_F10"
+    - "N15_M07_F04"
+    - "N15_M07_F10"
+  # 目标域工况
+  target_condition: "N09_M07_F10"
+
+sampling:
+  source:
+    normal_per_domain: 300
+    fault_per_class_per_domain: 10
+
+
+output:
+  output_dir: "data./PU"
+  task_name: "PU_T12_300-10"

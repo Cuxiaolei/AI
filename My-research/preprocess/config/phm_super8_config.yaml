@@ -1,0 +1,160 @@
+# ===================== phm_super8_config.yaml 简要参数说明 =====================
+# seed
+#   随机种子，控制预处理抽样过程的可复现性。
+# dataset.root_dir
+#   原始 PHM spur8 数据集根目录。
+# dataset.class_folders
+#   参与预处理的类别文件夹列表，顺序决定最终类别标签编号。
+# dataset.normal_class_folder
+#   被视为正常类的类别文件夹名，其余类别默认视为故障类。
+# split.source_conditions
+#   源域工况列表，用于生成训练集；若启用验证集，其中一个会被拿去做验证集。
+# split.target_condition
+#   目标域工况，用于生成测试集，不能与源域重复。
+# split.use_val
+#   是否划分验证集；false 生成 train/test，true 生成 train/val/test。
+# split.val_condition
+#   当 use_val=true 时，指定哪个源域工况作为验证域。
+# sampling.source.normal_per_domain
+#   每个源域中正常类抽取的样本数。
+# sampling.source.fault_per_class_per_domain
+#   每个源域中每个故障类抽取的样本数。
+# sampling.target.normal_per_domain
+#   目标域中正常类抽取的样本数。
+# sampling.target.fault_per_class_per_domain
+#   目标域中每个故障类抽取的样本数。
+# sampling.val.normal_per_domain
+#   验证域中正常类抽取的样本数，仅在 use_val=true 时生效。
+# sampling.val.fault_per_class_per_domain
+#   验证域中每个故障类抽取的样本数，仅在 use_val=true 时生效。
+# feature.win_len
+#   每个样本滑窗的长度，即每次从原始信号中截取多少点。
+# feature.stride
+#   常规滑窗步长，即相邻两个窗口起点之间的间隔。
+# feature.zscore_per_window
+#   是否对每个滑窗样本单独做 z-score 标准化。
+# feature.fft_mode
+#   频域特征形式，可选 power（功率谱）或 magnitude（幅值谱）。
+# feature.tf_image_size
+#   时频图最终缩放尺寸 [H, W]。
+# feature.x_tf_dtype
+#   时频图保存的数据类型，通常为 float16 或 float32。
+# feature.overlap_sampling.enabled
+#   当常规滑窗不足时，是否启用同一文件内部的错位重叠补样。
+# feature.overlap_sampling.offsets
+#   错位重叠采样的偏移量列表，用于生成不同于常规滑窗的新窗口起点。
+# feature.stft.nperseg
+#   STFT 每个短时窗的长度。
+# feature.stft.noverlap
+#   STFT 相邻短时窗之间的重叠长度。
+# feature.stft.nfft
+#   STFT 中每帧 FFT 的长度。
+# output.output_dir
+#   预处理结果保存目录，用于存放 h5 和 trace.json 文件。
+# output.task_name
+#   当前任务名称前缀，用于构造输出文件名。
+# ============================================================================
+
+# H1:"30hz_High"
+# H2:"35hz_High"
+# H3:"40hz_High"
+# H4:"45hz_High"
+# 任务5：0，1，2 -> 3
+# 任务6：0，1，3 -> 2
+# 任务7：0，2，3 -> 1
+# 任务8：1，2，3 -> 0
+
+seed: 2026
+
+dataset:
+  # PHM 2009 spur8 根目录
+  # 目录示例：
+  # root_dir/
+  #   spur 1/
+  #   spur 2/
+  #   ...
+  #   spur 8/
+  root_dir: 'D:\user\dataSet\！！工业旋转轴承数据集\PHM_Society_2009_Competition_Expanded_txt'
+
+  # 8 个类别文件夹的顺序，也同时决定 y 的标签编号
+  class_folders:
+    - "spur 1"
+    - "spur 2"
+    - "spur 3"
+    - "spur 4"
+    - "spur 5"
+    - "spur 6"
+    - "spur 7"
+    - "spur 8"
+
+  # 哪一个 spur 文件夹代表“正常类”
+  # !!! 请按你自己的数据标注实际修改 !!!
+  normal_class_folder: "spur 1"
+
+split:
+  # 你可以自由指定哪些工况作为源域，哪个工况作为目标域
+  # 工况名来自文件名中的“转速_负载”字段，如 30hz_High
+  source_conditions:
+    - "30hz_High"
+    - "35hz_High"
+    - "40hz_High"
+  target_condition: "45hz_High"
+
+  # 是否单独划分验证集工况
+  # false: train/test -> 3 个源域训练，1 个目标域测试
+  # true : train/val/test -> 从 source_conditions 中抽 1 个工况做 val
+  use_val: false
+
+  # 当 use_val=true 时，val_condition 必须来自 source_conditions
+  val_condition: "40hz_High"
+
+sampling:
+  # 源域（训练域）抽样设置：每个源域都按下面数量抽样
+  source:
+    normal_per_domain: 300
+    fault_per_class_per_domain: 5
+
+  # 目标域（测试域）抽样设置：每个目标域都按下面数量抽样
+  target:
+    normal_per_domain: 1000
+    fault_per_class_per_domain: 100
+
+  # 验证域抽样设置（仅在 use_val=true 时生效）
+  # 建议单独设置，不要简单等于 source
+  val:
+    normal_per_domain: 200
+    fault_per_class_per_domain: 20
+
+feature:
+  # 从原始一维振动信号切滑窗
+  win_len: 2048
+  stride: 1024
+
+  # 每个窗是否做 z-score 标准化
+  zscore_per_window: true
+
+  # 频域特征：rFFT -> magnitude/power -> log1p
+  fft_mode: "power"     # 可选: power / magnitude
+
+  # 是否允许当窗口不足时重复抽样
+  allow_replacement: false
+
+  # 时频图输出大小 [H, W]
+  tf_image_size: [128, 128]
+
+  # x_tf 存储类型：float16 更省空间，float32 更稳妥
+  x_tf_dtype: "float32"
+
+  overlap_sampling:
+    enabled: true
+    offsets: [ 512, 256, 768 ]
+
+  # STFT 参数
+  stft:
+    nperseg: 256
+    noverlap: 128
+    nfft: 256
+
+output:
+  output_dir: "./PHM_spur"
+  task_name: "PHM_spur8_T1_200-5"

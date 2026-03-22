@@ -1,0 +1,20 @@
+python -m src.test.test_h5_dataloader --h5_path data/PHM_spur/PHM_spur8_T1_200-5_train.h5 --dataset_name phm --feature_mode tf --batch_size 16 --num_workers 2
+python -m src.test.test_h5_dataloader --h5_path data/PHM_spur/PHM_spur8_T1_200-5_test.h5 --dataset_name phm --feature_mode tf --batch_size 16 --num_workers 2
+
+python -m src.test.test_h5_dataloader --h5_path data/PU/PU_T1_200-5_train.h5 --dataset_name pu --feature_mode tf --batch_size 16 --num_workers 2
+python -m src.test.test_h5_dataloader --h5_path data/PU/PU_T1_200-5_test.h5 --dataset_name pu --feature_mode tf --batch_size 16 --num_workers 2
+
+python -m src.test.test_h5_dataloader --h5_path data/CWRU_12k_DE/CWRU_12k_DE_T1_200-5_train.h5 --dataset_name cwru --feature_mode tf --batch_size 16 --num_workers 2
+python -m src.test.test_h5_dataloader --h5_path data/CWRU_12k_DE/CWRU_12k_DE_T1_200-5_test.h5 --dataset_name cwru --feature_mode tf --batch_size 16 --num_workers 2
+
+# 测试backbone
+# 1.测试phm数据集频域数据
+python -m src.test.test_backbone_with_loader --h5_path data/PHM_spur/PHM_spur8_T1_200-5_train.h5 --dataset_name phm --feature_mode freq --backbone_name resnet1d18 --batch_size 8
+# 2.测试phm数据集时频图数据
+python -m src.test.test_backbone_with_loader --h5_path data/PHM_spur/PHM_spur8_T1_200-5_train.h5 --dataset_name phm --feature_mode tf --backbone_name resnet18 --pretrained --batch_size 8
+# 3.测试phm数据集双模态数据
+python -m src.test.test_backbone_with_loader --h5_path data/PHM_spur/PHM_spur8_T1_200-5_train.h5 --dataset_name phm --feature_mode both --backbone_name_freq resnet1d18 --backbone_name_tf resnet18 --batch_size 8
+
+
+
+

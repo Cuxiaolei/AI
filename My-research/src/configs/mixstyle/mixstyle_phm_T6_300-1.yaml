@@ -1,0 +1,11 @@
+
+BASE: ../mixstyle.yaml
+
+data:
+  train_h5: data/PHM_spur/PHM_spur8_T6_300-1/train.h5
+  test_h5: data/PHM_spur/PHM_spur8_T6_300-1/test.h5
+  dataset_name: phm
+  num_classes: 8
+
+output:
+  exp_name: mixstyle_phm_T6_300-1

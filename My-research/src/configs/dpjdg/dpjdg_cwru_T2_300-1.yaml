@@ -1,0 +1,11 @@
+
+BASE: ../dpjdg.yaml
+
+data:
+  train_h5: data/CWRU_12k_DE/CWRU_T2_300-1/train.h5
+  test_h5: data/CWRU_12k_DE/CWRU_T2_300-1/test.h5
+  dataset_name: cwru
+  num_classes: 10
+
+output:
+  exp_name: dpjdg_cwru_T2_300-1

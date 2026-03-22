@@ -1,5 +1,0 @@
-include README.md
-include LICENSE
-
-recursive-exclude tests *
-recursive-include torkit3d/csrc *

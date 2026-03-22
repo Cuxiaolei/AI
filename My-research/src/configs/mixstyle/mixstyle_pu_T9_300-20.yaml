@@ -1,0 +1,11 @@
+
+BASE: ../mixstyle.yaml
+
+data:
+  train_h5: data/PU/PU_T9_300-20/train.h5
+  test_h5: data/PU/PU_T9_300-20/test.h5
+  dataset_name: pu
+  num_classes: 9
+
+output:
+  exp_name: mixstyle_pu_T9_300-20

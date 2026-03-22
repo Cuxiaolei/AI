@@ -1,0 +1,23 @@
+BASE: base.yaml
+
+method:
+  name: mixstyle
+
+model:
+  feature_mode: freq
+  freq_backbone_name: resnet1d18
+  tf_backbone_name: resnet18
+  freq_in_channels: 1
+  tf_in_channels: 1
+  freq_pretrained: false
+  tf_pretrained: false
+  classifier_dropout: 0.0
+  mix_p: 0.5
+  mix_alpha: 0.1
+  mix_layer: layer1
+  backbone_kwargs:
+    norm: bn
+    act: elu
+
+output:
+  exp_name: mixstyle_freq_resnet1d18

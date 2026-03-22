@@ -1,0 +1,11 @@
+
+BASE: ../mldg.yaml
+
+data:
+  train_h5: data/PU/PU_T10_300-10/train.h5
+  test_h5: data/PU/PU_T10_300-10/test.h5
+  dataset_name: pu
+  num_classes: 9
+
+output:
+  exp_name: mldg_pu_T10_300-10
