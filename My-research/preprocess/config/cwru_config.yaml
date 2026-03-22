@@ -1,0 +1,213 @@
+# ======================= 配置文件参数简要说明（参数：描述） =======================
+# seed：随机种子，用于保证抽样结果可复现
+#
+# dataset.root_dir：CWRU 数据集总根目录
+# dataset.fault_subdir：故障数据子目录名，对应 12k Drive End Bearing Fault Data
+# dataset.normal_subdir：正常数据子目录名，对应 Normal Baseline Data
+# dataset.sample_rate：采样率，仅用于记录和说明，当前脚本特征提取不强依赖该值
+# dataset.conditions：工况列表，这里用 0HP / 1HP / 2HP / 3HP 表示 4 个域
+# dataset.class_names：参与预处理的类别列表，顺序决定最终标签编号
+# dataset.normal_class_name：被视为正常类的类别名，其余类别默认视为故障类
+# dataset.class_source_map：每个类别来自 normal 还是 fault 子目录
+# dataset.class_file_map：每个类别在每个工况下对应的 mat 文件编号，是最关键的映射表
+#
+# split.source_conditions：源域工况列表，用于生成训练集
+# split.target_condition：目标域工况，用于生成测试集
+# split.use_val：是否划分验证集；false 仅生成 train/test，true 生成 train/val/test
+# split.val_condition：当 use_val=true 时，指定哪个源域工况作为验证域
+#
+# sampling.source.normal_per_domain：每个源域中正常类抽取的样本数
+# sampling.source.fault_per_class_per_domain：每个源域中每个故障类抽取的样本数
+# sampling.target.normal_per_domain：目标域中正常类抽取的样本数
+# sampling.target.fault_per_class_per_domain：目标域中每个故障类抽取的样本数
+# sampling.val.normal_per_domain：验证域中正常类抽取的样本数
+# sampling.val.fault_per_class_per_domain：验证域中每个故障类抽取的样本数
+#
+# feature.win_len：每个样本滑窗长度
+# feature.stride：常规滑窗步长
+# feature.zscore_per_window：是否对每个窗样本做 z-score 标准化
+# feature.fft_mode：频域特征形式，可选 power / magnitude
+# feature.tf_image_size：时频图输出尺寸 [H, W]
+# feature.x_tf_dtype：时频图保存类型，可选 float16 / float32
+# feature.overlap_sampling.enabled：常规滑窗不足时是否启用同文件内错位重叠补样
+# feature.overlap_sampling.offsets：错位重叠补样的偏移量列表
+# feature.stft.nperseg：STFT 每个短时窗长度
+# feature.stft.noverlap：STFT 相邻短时窗重叠长度
+# feature.stft.nfft：STFT FFT 长度
+#
+# output.output_dir：预处理结果保存目录
+# output.task_name：任务名称前缀，用于生成输出文件名
+# ==============================================================================
+
+seed: 2026
+
+dataset:
+  root_dir: "D:/user/dataSet/！！工业旋转轴承数据集/西储大学数据集"
+  fault_subdir: "12k Drive End Bearing Fault Data"
+  normal_subdir: "Normal Baseline Data"
+  sample_rate: 12000
+
+  # 4 个工况域
+  # 任务1：0，1，2 -> 3
+  # 任务2：0，1，3 -> 2
+  # 任务3：0，2，3 -> 1
+  # 任务4：1，2，3 -> 0
+  conditions:
+    - "0HP"
+    - "1HP"
+    - "2HP"
+    - "3HP"
+
+
+
+  # 10 类：1 正常 + 9 故障
+  class_names:
+    - "Normal"
+    - "IR007"
+    - "B007"
+    - "OR007"
+    - "IR014"
+    - "B014"
+    - "OR014"
+    - "IR021"
+    - "B021"
+    - "OR021"
+
+  normal_class_name: "Normal"
+
+  # 每个类别来自哪个目录
+  class_source_map:
+    Normal: "normal"
+    IR007: "fault"
+    B007: "fault"
+    OR007: "fault"
+    IR014: "fault"
+    B014: "fault"
+    OR014: "fault"
+    IR021: "fault"
+    B021: "fault"
+    OR021: "fault"
+
+  # 每个类别在每个工况下对应的 mat 文件编号
+  # Normal 使用 Normal Baseline Data 中的文件
+  # 其余类别使用 12k Drive End Bearing Fault Data 中的文件
+  class_file_map:
+    Normal:
+      "0HP": "97"
+      "1HP": "98"
+      "2HP": "99"
+      "3HP": "100"
+
+    IR007:
+      "0HP": "105"
+      "1HP": "106"
+      "2HP": "107"
+      "3HP": "108"
+
+    B007:
+      "0HP": "118"
+      "1HP": "119"
+      "2HP": "120"
+      "3HP": "121"
+
+    OR007:
+      "0HP": "130"
+      "1HP": "131"
+      "2HP": "132"
+      "3HP": "133"
+
+    IR014:
+      "0HP": "169"
+      "1HP": "170"
+      "2HP": "171"
+      "3HP": "172"
+
+    B014:
+      "0HP": "185"
+      "1HP": "186"
+      "2HP": "187"
+      "3HP": "188"
+
+    OR014:
+      "0HP": "197"
+      "1HP": "198"
+      "2HP": "199"
+      "3HP": "200"
+
+    IR021:
+      "0HP": "209"
+      "1HP": "210"
+      "2HP": "211"
+      "3HP": "212"
+
+    B021:
+      "0HP": "222"
+      "1HP": "223"
+      "2HP": "224"
+      "3HP": "225"
+
+    OR021:
+      "0HP": "234"
+      "1HP": "235"
+      "2HP": "236"
+      "3HP": "237"
+
+split:
+  # 你可以自由修改任务划分
+  source_conditions:
+    - "0HP"
+    - "1HP"
+    - "2HP"
+
+  target_condition: "3HP"
+
+  use_val: false
+  val_condition: "2HP"
+
+sampling:
+  # 源域（训练集）抽样数
+  source:
+    normal_per_domain: 200
+    fault_per_class_per_domain: 5
+
+  # 目标域（测试集）抽样数
+  target:
+    normal_per_domain: 1000
+    fault_per_class_per_domain: 100
+
+  # 验证域（仅 use_val=true 时生效）
+  val:
+    normal_per_domain: 200
+    fault_per_class_per_domain: 20
+
+feature:
+  # 滑窗参数
+  win_len: 2048
+  stride: 1024
+
+  # 是否对每个窗做 z-score
+  zscore_per_window: true
+
+  # 频域特征形式：power 或 magnitude
+  fft_mode: "power"
+
+  # 时频图输出大小 [H, W]
+  tf_image_size: [128, 128]
+
+  # x_tf 保存类型：float16 更省空间，float32 更稳妥
+  x_tf_dtype: "float16"
+
+  # 错位重叠补样设置
+  overlap_sampling:
+    enabled: true
+    offsets: [512, 256, 768, 850]
+
+  # STFT 参数
+  stft:
+    nperseg: 256
+    noverlap: 128
+    nfft: 256
+
+output:
+  output_dir: "D:\user\Documents\ai\paper\1_process\outputs\preprocess\CWRU_12k_DE"
+  task_name: "CWRU_12k_DE_T1_200-5"

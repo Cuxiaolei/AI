@@ -1,0 +1,20 @@
+BASE: ../cwru_config.yaml
+
+split:
+  # 4 个工况域
+  # 任务1：0，1，2 -> 3
+  source_conditions:
+    - "0HP"
+    - "1HP"
+    - "2HP"
+  target_condition: "3HP"
+
+sampling:
+  # 源域（训练集）抽样数
+  source:
+    normal_per_domain: 300
+    fault_per_class_per_domain: 1
+
+output:
+  output_dir: "data/CWRU_12k_DE"
+  task_name: "CWRU_T1_300-1"

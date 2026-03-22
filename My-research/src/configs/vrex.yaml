@@ -1,0 +1,22 @@
+BASE: base.yaml
+
+method:
+  name: vrex
+
+model:
+  feature_mode: freq
+  freq_backbone_name: resnet1d18
+  tf_backbone_name: resnet18
+  freq_in_channels: 1
+  tf_in_channels: 1
+  freq_pretrained: false
+  tf_pretrained: false
+  classifier_dropout: 0.0
+  backbone_kwargs:
+    norm: bn
+    act: elu
+  vrex_lambda: 1.0
+  vrex_penalty_anneal_iters: 0
+
+output:
+  exp_name: vrex_freq_resnet1d18

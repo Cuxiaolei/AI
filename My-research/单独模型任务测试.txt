@@ -1,0 +1,13 @@
+
+python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T5_300-5.yaml
+python -m src.main --configs src/configs/darm/darm_phm_T5_300-5.yaml
+
+
+python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T5_300-5.yaml
+
+
+# 测试组件
+python -m src.main --configs src/configs/mcpdg_ablate/mcpdg_a0_phm_T5_300-5.yaml
+python -m src.main --configs src/configs/mcpdg_ablate/mcpdg_a1_phm_T5_300-5.yaml
+python -m src.main --configs src/configs/mcpdg_ablate/mcpdg_a2_phm_T5_300-5.yaml
+python -m src.main --configs src/configs/mcpdg_ablate/mcpdg_a3_phm_T5_300-5.yaml

@@ -1,0 +1,6 @@
+python preprocess_phm_super8.py --config phm_super8_config.yaml
+
+python preprocess_pu.py --config pu_config.yaml
+
+python preprocess_cwru.py --config cwru_config.yaml
+

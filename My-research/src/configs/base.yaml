@@ -1,0 +1,47 @@
+train:
+  seed: 42
+  device: auto
+  epochs: 50
+  batch_size: 32
+  test_batch_size: 64
+
+data:
+  train_h5: data/PHM_spur/PHM_spur8_T1_300-1/train.h5
+  test_h5: data/PHM_spur/PHM_spur8_T1_300-1/test.h5
+  dataset_name: phm
+  num_classes: 8
+  num_workers: 4
+  pin_memory: true
+  drop_last_train: false
+
+optimizer:
+  name: adam
+  lr: 0.001
+  weight_decay: 0.0001
+  momentum: 0.9
+
+scheduler:
+  name: cosine
+  min_lr: 1.0e-6
+
+loss:
+  name: cross_entropy
+  use_class_weights: true  # 类别不平衡时建议开启
+  gamma: 2.0
+
+evaluation:
+  protocol: strict_dg_final_only
+  save_confusion_matrix: true
+
+sampler:
+  enabled: false
+  name: meta_domain_batch_sampler
+  domains_per_batch: 2
+  samples_per_domain: null
+  shuffle: true
+  drop_last: false
+  seed: 42
+
+output:
+  root: outputs
+  exp_name: default_exp

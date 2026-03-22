@@ -1,0 +1,24 @@
+
+BASE: ../mcpdg_ablate.yaml
+
+data:
+  train_h5: data/PHM_spur/PHM_spur8_T5_300-5/train.h5
+  test_h5: data/PHM_spur/PHM_spur8_T5_300-5/test.h5
+  dataset_name: phm          # phm / pu
+  num_classes: 8
+
+model:
+  use_linear_head: true
+  use_dynamic_proto: true
+  use_proto_cls: true
+  use_align_loss: true
+  use_pcl_loss: true
+  use_meta_loss: true
+
+
+output:
+  exp_name: mcpdg-a3_phm_T5_300-5
+
+
+
+

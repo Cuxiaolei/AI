@@ -1,0 +1,11 @@
+
+BASE: ../erm.yaml
+
+data:
+  train_h5: data/CWRU_12k_DE/CWRU_T3_300-20/train.h5
+  test_h5: data/CWRU_12k_DE/CWRU_T3_300-20/test.h5
+  dataset_name: cwru
+  num_classes: 10
+
+output:
+  exp_name: erm_cwru_T3_300-20

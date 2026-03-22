@@ -1,0 +1,11 @@
+
+BASE: ../vrex.yaml
+
+data:
+  train_h5: data/CWRU_12k_DE/CWRU_T4_300-5/train.h5
+  test_h5: data/CWRU_12k_DE/CWRU_T4_300-5/test.h5
+  dataset_name: cwru
+  num_classes: 10
+
+output:
+  exp_name: vrex_cwru_T4_300-5
