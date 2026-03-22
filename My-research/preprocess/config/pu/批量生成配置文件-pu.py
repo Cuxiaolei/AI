@@ -21,8 +21,8 @@ sampling:
 
 
 output:
-  output_dir: "data./PU"
-  task_name: "PU_T{task_num}_300-{fault_num}"
+  output_dir: "{output_dir}"
+  task_name: "PU_T{task_num}_{fault_num}"
 """
 
 # 工况映射表
@@ -35,11 +35,14 @@ CONDITIONS = {
 
 # 任务配置：键为任务编号，值为(源工况索引列表, 目标工况索引, 任务描述)
 TASK_CONFIGS = {
-    9: ([0, 1, 2], 3, "0，1，2 -> 3"),
-    10: ([0, 1, 3], 2, "0，1，3 -> 2"),
-    11: ([0, 2, 3], 1, "0，2，3 -> 1"),
-    12: ([1, 2, 3], 0, "1，2，3 -> 0")
+    5: ([0, 1, 2], 3, "0，1，2 -> 3"),
+    6: ([0, 1, 3], 2, "0，1，3 -> 2"),
+    7: ([0, 2, 3], 1, "0，2，3 -> 1"),
+    8: ([1, 2, 3], 0, "1，2，3 -> 0")
 }
+
+# 配置文件根目录字段根目录
+OUTPUT_DIR = "./PU"
 
 # fault_per_class_per_domain 取值列表
 FAULT_VALUES = [1, 5, 10, 20]
@@ -81,11 +84,12 @@ def generate_yaml_file(task_num: int, fault_num: int):
         target_idx=target_idx,
         source_conditions=formatted_source_conds,
         target_condition=target_condition,
-        fault_num=fault_num
+        fault_num=fault_num,
+        output_dir=OUTPUT_DIR,
     )
 
     # 定义文件名
-    file_name = f"PU_T{task_num}_300-{fault_num}.yaml"
+    file_name = f"pu_T{task_num}_{fault_num}.yaml"
     file_path = os.path.join(output_dir, file_name)
 
     # 写入文件（保持原格式）

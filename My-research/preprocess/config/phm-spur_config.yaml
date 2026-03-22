@@ -156,5 +156,5 @@ feature:
     nfft: 256
 
 output:
-  output_dir: "./PHM_spur"
-  task_name: "PHM_spur8_T1_200-5"
+  output_dir: "./PHM-spur"
+  task_name: "PHM-spur_T1_5"
