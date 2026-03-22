@@ -45,3 +45,4 @@ sampler:
 output:
   root: outputs
   exp_name: default_exp
+  save_checkpoint: false

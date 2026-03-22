@@ -152,7 +152,8 @@ class Trainer:
             history.append(row)
             self.recorder.append(row)
             self.recorder.flush()
-            self.save_checkpoint(epoch, history)
+            if bool(self.cfg.get('output', {}).get('save_checkpoint', False)):
+                self.save_checkpoint(epoch, history)
 
             extra_msg = ' '.join([f'{k}={v:.4f}' for k, v in train_metrics.items() if k not in {'loss','acc'}])
             self.logger.info(
