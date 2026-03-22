@@ -12,26 +12,27 @@ echo ==================== 开始执行指令 ====================
 echo 执行时间：%date% %time%
 
 
-# 任务9 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_pu --configs data/config/pu/pu_T9_300-1.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T9_300-5.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T9_300-10.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T9_300-20.yaml
+# 任务5 系列（fault_per_class_per_domain = 1/5/10/20）
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T5_1.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T5_5.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T5_10.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T5_20.yaml
 
-# 任务10 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_pu --configs data/config/pu/pu_T10_300-1.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T10_300-5.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T10_300-10.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T10_300-20.yaml
 
-# 任务11 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_pu --configs data/config/pu/pu_T11_300-1.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T11_300-5.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T11_300-10.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T11_300-20.yaml
+# 任务6 系列（fault_per_class_per_domain = 1/5/10/20）
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T6_1.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T6_5.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T6_10.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T6_20.yaml
 
-# 任务12 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_pu --configs data/config/pu/pu_T12_300-1.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T12_300-5.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T12_300-10.yaml
-python -m data.preprocess_pu --configs data/config/pu/pu_T12_300-20.yaml
+# 任务7 系列（fault_per_class_per_domain = 1/5/10/20）
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T7_1.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T7_5.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T7_10.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T7_20.yaml
+
+# 任务8 系列（fault_per_class_per_domain = 1/5/10/20）
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T8_1.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T8_5.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T8_10.yaml
+python -m preprocess.preprocess_pu --configs preprocess/config/pu/pu_T8_20.yaml

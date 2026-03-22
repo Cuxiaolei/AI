@@ -156,5 +156,5 @@ feature:
     nfft: 256
 
 output:
-  output_dir: "./PHM-spur"
+  output_dir: D:\user\Documents\ai\paper\1_process\outputs\preprocess\phm-spur
   task_name: "PHM-spur_T1_5"

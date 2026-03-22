@@ -4,7 +4,7 @@ from typing import List, Dict
 
 # 基础配置模板（与原模板格式完全一致）
 BASE_TEMPLATE = """
-BASE: ../pu_config.yaml
+BASE: ../phm-spur_config.yaml
 
 # 任务{task_num}：{task_desc} -> {target_idx}
 split:
@@ -21,23 +21,23 @@ sampling:
 
 
 output:
-  task_name: "PU_T{task_num}_{fault_num}"
+  task_name: "phm-spur_T{task_num}_{fault_num}"
 """
 
 # 工况映射表
 CONDITIONS = {
-    "H1": "N09_M07_F10",
-    "H2": "N15_M01_F10",
-    "H3": "N15_M07_F04",
-    "H4": "N15_M07_F10"
+    "H1": "30hz_High",
+    "H2": "35hz_High",
+    "H3": "40hz_High",
+    "H4": "45hz_High"
 }
 
 # 任务配置：键为任务编号，值为(源工况索引列表, 目标工况索引, 任务描述)
 TASK_CONFIGS = {
-    5: ([0, 1, 2], 3, "0，1，2 -> 3"),
-    6: ([0, 1, 3], 2, "0，1，3 -> 2"),
-    7: ([0, 2, 3], 1, "0，2，3 -> 1"),
-    8: ([1, 2, 3], 0, "1，2，3 -> 0")
+    1: ([0, 1, 2], 3, "0，1，2 -> 3"),
+    2: ([0, 1, 3], 2, "0，1，3 -> 2"),
+    3: ([0, 2, 3], 1, "0，2，3 -> 1"),
+    4: ([1, 2, 3], 0, "1，2，3 -> 0")
 }
 
 
@@ -85,7 +85,7 @@ def generate_yaml_file(task_num: int, fault_num: int):
     )
 
     # 定义文件名
-    file_name = f"pu_T{task_num}_{fault_num}.yaml"
+    file_name = f"phm-spur_T{task_num}_{fault_num}.yaml"
     file_path = os.path.join(output_dir, file_name)
 
     # 写入文件（保持原格式）

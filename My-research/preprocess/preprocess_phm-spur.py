@@ -49,7 +49,7 @@ import yaml
 from scipy import signal
 from scipy.ndimage import zoom
 
-from data.config import load_config
+from preprocess.config import load_config
 
 
 @dataclass

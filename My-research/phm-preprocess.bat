@@ -11,27 +11,27 @@ set CONSOLE_FONT_CODEPAGE=65001
 echo ==================== 开始执行指令 ====================
 echo 执行时间：%date% %time%
 
-# 任务5 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T5_300-1.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T5_300-5.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T5_300-10.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T5_300-20.yaml
+# 任务1 系列（fault_per_class_per_domain = 1/5/10/20）
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T1_1.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T1_5.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T1_10.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T1_20.yaml
 
 # 任务6 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T6_300-1.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T6_300-5.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T6_300-10.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T6_300-20.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T2_1.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T2_5.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T2_10.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T2_20.yaml
 
 # 任务7 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T7_300-1.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T7_300-5.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T7_300-10.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T7_300-20.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T3_1.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T3_5.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T3_10.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T3_20.yaml
 
 # 任务8 系列（fault_per_class_per_domain = 1/5/10/20）
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T8_300-1.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T8_300-5.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T8_300-10.yaml
-python -m data.preprocess_phm_super8 --configs data/config/phm/phm_T8_300-20.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T4_1.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T4_5.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T4_10.yaml
+python -m preprocess.preprocess_phm-spur --configs preprocess/config/phm/phm-spur_T4_20.yaml
 

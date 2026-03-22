@@ -125,5 +125,5 @@ feature:
     nfft: 256
 
 output:
-  output_dir: "./PU"
+  output_dir: D:\user\Documents\ai\paper\1_process\outputs\preprocess\pu
   task_name: "PU_T1_200-5"

@@ -10,8 +10,8 @@ from .groupdro import GroupDROClassifier, GroupDROConfig
 from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
 from .dpjdg import DPJDGClassifier, DPJDGConfig
+from .mcpdg2 import MCPDGClassifier, MCPDGConfig
 from .mcpdg import MCPDGClassifier, MCPDGConfig
-from .mcpdg_ablate import MCPDGAblateClassifier, MCPDGAblateConfig
 
 
 def _common_cfg(cfg: dict):
@@ -87,22 +87,9 @@ def build_method(cfg: dict):
             dpjdg_mask_ratio=float(model_cfg.get('dpjdg_mask_ratio', 0.05)),
             dpjdg_rbf_gamma=float(model_cfg.get('dpjdg_rbf_gamma', 1.0)),
         ))
-    if method_name in {'mcpdg', 'meta_cond_proto_dg'}:
+
+    if method_name == 'mcpdg':
         return MCPDGClassifier(MCPDGConfig(
-            **common,
-            cond_dim=int(model_cfg.get('cond_dim', 3)),
-            cond_hidden_dim=int(model_cfg.get('cond_hidden_dim', 64)),
-            proto_hidden_dim=int(model_cfg.get('proto_hidden_dim', 256)),
-            align_weight=float(model_cfg.get('align_weight', 1.0)),
-            pcl_weight=float(model_cfg.get('pcl_weight', 0.2)),
-            pcl_temperature=float(model_cfg.get('pcl_temperature', 0.1)),
-            meta_test_weight=float(model_cfg.get('meta_test_weight', 1.0)),
-            meta_test_domains=int(model_cfg.get('meta_test_domains', 1)),
-            meta_randomize=bool(model_cfg.get('meta_randomize', True)),
-            meta_split_seed=int(model_cfg.get('meta_split_seed', 42)),
-        ))
-    if method_name == 'mcpdg_ablate':
-        return MCPDGAblateClassifier(MCPDGAblateConfig(
             **common,
             cond_dim=int(model_cfg.get('cond_dim', 3)),
             cond_hidden_dim=int(model_cfg.get('cond_hidden_dim', 64)),
