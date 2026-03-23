@@ -7,19 +7,14 @@ def generate_single_yaml(output_dir, dataset_info, t_val, num_val, model):
     ds_path_prefix = dataset_info["path_prefix"]
     ds_class = dataset_info["class"]
 
-    # 处理PHM数据集的spur后缀
-    if ds_name == "phm":
-        ds_identifier = f"PHM_spur{dataset_info['spur_num']}"
-    else:
-        ds_identifier = ds_name.upper()  # CWRU/PU直接转大写
 
     # 构建YAML内容模板
     yaml_content = f"""
 BASE: ../{model}.yaml
 
 data:
-  train_h5: data/{ds_path_prefix}/{ds_identifier}_{t_val}_{num_val}/train.h5
-  test_h5: data/{ds_path_prefix}/{ds_identifier}_{t_val}_{num_val}/test.h5
+  train_h5: /root/data/{ds_path_prefix}/{ds_path_prefix}_{t_val}_{num_val}/train.h5
+  test_h5: /root/data/{ds_path_prefix}/{ds_path_prefix}_{t_val}_{num_val}/test.h5
   dataset_name: {ds_name}
   num_classes: {ds_class}
 
@@ -43,35 +38,27 @@ def main():
     # ===================== 核心配置（严格按要求定义） =====================
     script_dir = os.path.dirname(os.path.abspath(__file__))  # 脚本所在目录的绝对路径
     output_dir = script_dir  # 输出目录 = 脚本所在目录
-    num_vals = ["300-1", "300-5", "300-10", "300-20"]  # 4个数值后缀（固定）
+    num_vals = ["1", "5", "10", "20"]  # 4个数值后缀（固定）
 
     # 修改这个
     model = "groupdro"
 
     # 3个数据集的完整配置（每个4个T值）
     datasets = [
-        # 1. CWRU数据集：T1-T4 → 4个T值 × 4个数值 = 16个文件
-        {
-            "name": "cwru",
-            "class": 10,
-            "path_prefix": "CWRU_12k_DE",
-            "t_list": ["T1", "T2", "T3", "T4"],
-            "spur_num": ""  # 非PHM数据集无需spur
-        },
-        # 2. PHM数据集：T5-T8 → 4个T值 × 4个数值 = 16个文件
+        # 1. PHM数据集：T1-T4 → 4个T值 × 4个数值 = 16个文件
         {
             "name": "phm",
             "class": 8,
-            "path_prefix": "PHM_spur",
-            "t_list": ["T5", "T6", "T7", "T8"],
-            "spur_num": 8  # PHM_spur8固定
+            "path_prefix": "phm-spur",
+            "t_list": ["T1", "T2", "T3", "T4"],
+            "spur_num": 8  # PHM_spur固定
         },
-        # 3. PU数据集：T9-T12 → 4个T值 × 4个数值 = 16个文件
+        # 2. PU数据集：T5-T8 → 4个T值 × 4个数值 = 16个文件
         {
             "name": "pu",
             "class": 9,
-            "path_prefix": "PU",
-            "t_list": ["T9", "T10", "T11", "T12"],
+            "path_prefix": "pu",
+            "t_list": ["T5", "T6", "T7", "T8"],
             "spur_num": ""  # 非PHM数据集无需spur
         }
     ]
@@ -96,7 +83,7 @@ def main():
     # 3. 输出汇总信息
     print(f"\n🎉 生成完成！总计生成 {generated_count} 个YAML文件")
     print(f"📂 文件存储路径：{os.path.abspath(output_dir)}")
-    print(f"📊 明细：CWRU(16个) + PHM(16个) + PU(16个) = 48个")
+    print(f"📊 明细：PHM(16个) + PU(16个) = 48个")
 
 
 if __name__ == "__main__":

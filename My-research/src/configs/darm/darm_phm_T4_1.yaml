@@ -1,0 +1,11 @@
+
+BASE: ../darm.yaml
+
+data:
+  train_h5: /root/data/phm-spur/phm-spur_T4_1/train.h5
+  test_h5: /root/data/phm-spur/phm-spur_T4_1/test.h5
+  dataset_name: phm
+  num_classes: 8
+
+output:
+  exp_name: darm_phm_T4_1

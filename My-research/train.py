@@ -89,7 +89,6 @@ def filter_config_paths(all_paths: List[str], run_config: RunConfig) -> List[str
     filtered = []
     for path in all_paths:
         # 解析路径中的关键信息（正则匹配）
-        # 路径格式示例：darm/darm_cwru_T1_300-1.yaml
         match = re.match(
             r"^(?P<method>\w+)/(?P<method2>\w+)_(?P<dataset>\w+)_(?P<t_num>T\d+)_(?P<suffix>\d+)\.yaml$", path)
         if not match:
@@ -157,20 +156,19 @@ if __name__ == "__main__":
     # 示例1：运行darm方法下cwru数据集的所有T编号、所有后缀
     run_config = RunConfig(
         methods=
-        # "darm," +
-        # "dpjdg," +
-        # "erm," +
-        # "groupdro," +
-        # "irm," +
-        # "mixstyle," +
-        # "mldg," +
-        # "vrex," +
+        "darm," +
+        "dpjdg," +
+        "erm," +
+        "groupdro," +
+        "irm," +
+        "mixstyle," +
+        "mldg," +
+        "vrex," +
         "mcpdg," +
         "",  # 自动忽略末尾逗号
 
         # datasets="cwru",
-        datasets="phm",
-        # datasets="pu",
+        datasets="phm, pu",
         debug_mode=False  # 先调试看筛选结果，确认后改为False
     )
 

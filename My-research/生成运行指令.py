@@ -15,14 +15,14 @@ def generate_model_file_paths():
     final_output = []
     for model in models:
         # 添加模型标题（可选，便于区分）
-        final_output.append(f"### {model} 模型")
+        final_output.append(f"echo {model} 模型")
 
         # 遍历每个数据集，生成路径
         for ds_idx, ds in enumerate(datasets):
             ds_paths = []
             for t_val in ds["t_list"]:
                 for num_val in num_vals:
-                    path = f'"{model}/{model}_{ds["name"]}_{t_val}_{num_val}.yaml",'
+                    path = f'python -m src.main --configs src/configs/{model}/{model}_{ds["name"]}_{t_val}_{num_val}.yaml'
                     ds_paths.append(path)
 
             # 将当前数据集的路径加入结果
@@ -40,7 +40,7 @@ def generate_model_file_paths():
     return "\n".join(final_output)
 
 
-def save_to_file(content, filename="model_file_paths.txt"):
+def save_to_file(content, filename="运行指令-model_file_paths.txt"):
     """
     将生成的路径列表保存到文件
 
