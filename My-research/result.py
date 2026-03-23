@@ -21,7 +21,7 @@ from openpyxl.utils import get_column_letter
 FIXED_MODEL_LIST = ["darm", "groupdro", "erm", "mixstyle", "mldg", "vrex", "irm", "dpjdg", "mcpdg"]
 
 # 2. 可配置项（按需修改）
-ROOT_DIR = ""  # outputs根目录（脚本放在outputs下时无需修改）
+ROOT_DIR = "outputs"  # outputs根目录（脚本放在outputs下时无需修改）
 TARGET_MODELS = [
     "darm",
     "dpjdg",
