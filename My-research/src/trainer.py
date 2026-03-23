@@ -174,11 +174,14 @@ class Trainer:
         self.recorder.append(final_row)
         self.recorder.flush()
 
+        print("before export_confusion_matrix")
         label_map = None
         if hasattr(self.test_loader.dataset, 'get_label_map'):
             label_map = self.test_loader.dataset.get_label_map()
         label_names = build_label_names(int(self.cfg['data']['num_classes']), label_map=label_map)
         export_confusion_matrix(cm, label_names, self.output_dir / 'confusion_matrices', stem='confusion_matrix_last')
+        print("after export_confusion_matrix")
+
 
         self.logger.info(
             'final_target_test loss=%.4f acc=%.4f precision_macro=%.4f recall_macro=%.4f f1_macro=%.4f',
@@ -186,6 +189,7 @@ class Trainer:
             final_metrics['recall_macro'], final_metrics['f1_macro'],
         )
 
+        print("before save_checkpoint")
         # 单独保存最终测试指标
         final_test_metrics = {
             'phase': 'final_test',
@@ -194,5 +198,8 @@ class Trainer:
         }
         with open(self.output_dir / 'final_test_metrics.json', 'w', encoding='utf-8') as f:
             json.dump(final_test_metrics, f, indent=2, ensure_ascii=False)
+        print("after save_checkpoint")
 
         return history
+
+
