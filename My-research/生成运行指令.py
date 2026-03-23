@@ -4,12 +4,11 @@ def generate_model_file_paths():
     返回：str - 格式化后的路径列表字符串
     """
     # 1. 配置基础参数
-    models = ["darm", "dpjdg", "erm", "groupdro", "irm", "mixstyle", "mldg", "vrex"]  # 7个模型
-    num_vals = ["300-1", "300-5", "300-10", "300-20"]  # 数值后缀
+    models = ["darm", "dpjdg", "erm", "groupdro", "irm", "mixstyle", "mldg", "vrex", "mcpdg"]  # 7个模型
+    num_vals = ["1", "5", "10", "20"]  # 数值后缀
     datasets = [
-        {"name": "cwru", "t_list": ["T1", "T2", "T3", "T4"]},  # CWRU数据集
-        {"name": "phm", "t_list": ["T5", "T6", "T7", "T8"]},  # PHM数据集
-        {"name": "pu", "t_list": ["T9", "T10", "T11", "T12"]}  # PU数据集
+        {"name": "phm", "t_list": ["T1", "T2", "T3", "T4"]},  # PHM数据集
+        {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
     ]
 
     # 2. 生成每个模型的路径列表
@@ -69,4 +68,4 @@ if __name__ == "__main__":
 
     # 输出汇总信息
     total_lines = len([line for line in path_content.split("\n") if line.strip() and not line.startswith("###")])
-    print(f"\n🎉 生成完成！总计 {total_lines} 个文件路径（7个模型 × 48个路径）")
+    print(f"\n🎉 生成完成！总计 {total_lines} 个文件路径")

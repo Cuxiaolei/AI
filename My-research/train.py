@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Set
 import ctypes
 import time
-ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
-print(f"[{time.strftime('%H:%M:%S')}] 本脚本防休眠已开启")
 
 # ====================== 核心配置类（灵活控制开关）======================
 @dataclass
@@ -93,7 +91,7 @@ def filter_config_paths(all_paths: List[str], run_config: RunConfig) -> List[str
         # 解析路径中的关键信息（正则匹配）
         # 路径格式示例：darm/darm_cwru_T1_300-1.yaml
         match = re.match(
-            r"^(?P<method>\w+)/(?P<method2>\w+)_(?P<dataset>\w+)_(?P<t_num>T\d+)_(?P<suffix>300-\d+)\.yaml$", path)
+            r"^(?P<method>\w+)/(?P<method2>\w+)_(?P<dataset>\w+)_(?P<t_num>T\d+)_(?P<suffix>\d+)\.yaml$", path)
         if not match:
             print(f"⚠️  路径格式无法解析，已跳过：{path}")
             continue
@@ -175,23 +173,6 @@ if __name__ == "__main__":
         # datasets="pu",
         debug_mode=False  # 先调试看筛选结果，确认后改为False
     )
-
-    # 示例2：运行dpjdg和erm方法下，phm数据集、T5-T8、后缀300-1和300-5
-    # run_config = RunConfig(
-    #     methods="dpjdg,erm",
-    #     datasets="phm",
-    #     t_nums="T5-T8",
-    #     suffixes="300-1,300-5",
-    #     debug_mode=True
-    # )
-
-    # 示例3：运行所有方法的pu数据集、T9-T12、后缀300-20
-    # run_config = RunConfig(
-    #     datasets="pu",
-    #     t_nums="T9-T12",
-    #     suffixes="300-20",
-    #     debug_mode=False  # 实际执行
-    # )
 
     # 3. 筛选需要运行的配置
     target_paths = filter_config_paths(ALL_CONFIG_PATHS, run_config)
