@@ -186,11 +186,7 @@ class Trainer:
             final_metrics['recall_macro'], final_metrics['f1_macro'],
         )
 
-        # 1) 保存完整训练历史
-        with open(self.output_dir / 'history.json', 'w', encoding='utf-8') as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-
-        # 2) 单独保存最终测试指标
+        # 单独保存最终测试指标
         final_test_metrics = {
             'phase': 'final_test',
             'epoch': epochs,
