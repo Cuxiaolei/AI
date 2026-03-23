@@ -189,7 +189,7 @@ class Trainer:
             final_metrics['recall_macro'], final_metrics['f1_macro'],
         )
 
-        print("before save_checkpoint")
+        print("before final_test_metrics")
         # 单独保存最终测试指标
         final_test_metrics = {
             'phase': 'final_test',
@@ -198,7 +198,7 @@ class Trainer:
         }
         with open(self.output_dir / 'final_test_metrics.json', 'w', encoding='utf-8') as f:
             json.dump(final_test_metrics, f, indent=2, ensure_ascii=False)
-        print("after save_checkpoint")
+        print("after final_test_metrics")
 
         return history
 
