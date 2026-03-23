@@ -4,10 +4,6 @@ data:
   train_h5: data/PHM_spur/PHM_spur8_T5_300-5/train.h5
   test_h5: data/PHM_spur/PHM_spur8_T5_300-5/test.h5
   dataset_name: phm          # phm / pu
-  num_classes: 8
-  num_workers: 4
-  pin_memory: true
-  drop_last_train: false
 
 method:
   name: mcpdg
