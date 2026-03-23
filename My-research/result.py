@@ -42,7 +42,7 @@ TARGET_TASKS = {  # 各数据集对应的任务
     "pu": ["T5", "T6", "T7", "T8"]
 }
 TARGET_DATA_SIZES = ["1", "5", "10", "20"]  # 数据大小
-OUTPUT_PARENT = "all-result"  # 输出父文件夹
+OUTPUT_PARENT = "/root/autodl-fs/all-result"  # 输出父文件夹
 
 # 3. 指标名称映射（关键：控制表头缩写）
 METRIC_MAPPING = {
