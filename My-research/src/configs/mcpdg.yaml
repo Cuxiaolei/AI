@@ -15,7 +15,7 @@ model:
   # tf:   只使用时频图输入
   # both: 同时使用频域和时频图
   # =========================
-  feature_mode: tf
+  feature_mode: freq
 
   # =========================
   # 1D 频域 backbone 配置
