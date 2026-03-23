@@ -22,5 +22,8 @@ model:
   dpjdg_mask_ratio: 0.05
   dpjdg_rbf_gamma: 1.0
 
+loss:
+  use_class_weights: false  # 类别不平衡时建议开启
+
 output:
   exp_name: dpjdg_freq_resnet1d18
