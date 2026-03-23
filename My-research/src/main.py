@@ -30,6 +30,7 @@ def main():
 
     set_seed(int(cfg['train'].get('seed', 42)))
     device = get_device(cfg['train'].get('device', 'auto'))
+    print('Using device:', device)
 
     output_dir = Path(cfg['output']['root']) / str(cfg['method']['name']).lower() / str(cfg['output']['exp_name'])
     output_dir.mkdir(parents=True, exist_ok=True)
