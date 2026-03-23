@@ -10,7 +10,7 @@ data:
   drop_last_train: false
 
 method:
-  name: mcpdg_ablate
+  name: mcpdg
 
 model:
   # =========================
