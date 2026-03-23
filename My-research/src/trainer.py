@@ -18,6 +18,8 @@ from src.utils.metrics import classification_metrics_from_confusion, confusion_m
 from src.utils.optim import build_optimizer, build_scheduler
 from src.utils.runtime import move_batch_to_device, tqdm
 
+import gc
+
 
 class Trainer:
     def __init__(self, cfg: dict, model: torch.nn.Module, train_loader: DataLoader, test_loader: DataLoader, device: torch.device, output_dir: str | Path) -> None:
@@ -136,6 +138,43 @@ class Trainer:
         }
         torch.save(ckpt, self.output_dir / 'last.pth')
 
+    def _close_dataset_if_possible(self, loader: DataLoader | None) -> None:
+        if loader is None:
+            return
+        ds = getattr(loader, 'dataset', None)
+        if ds is not None and hasattr(ds, 'close'):
+            try:
+                ds.close()
+            except Exception:
+                pass
+
+    def _shutdown_dataloader_workers(self, loader: DataLoader | None) -> None:
+        """
+        尽量提前释放 DataLoader worker，减少任务结束后长时间卡顿。
+        """
+        if loader is None:
+            return
+        try:
+            iterator = getattr(loader, '_iterator', None)
+            if iterator is not None and hasattr(iterator, '_shutdown_workers'):
+                iterator._shutdown_workers()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        self._shutdown_dataloader_workers(self.train_loader)
+        self._shutdown_dataloader_workers(self.test_loader)
+
+        self._close_dataset_if_possible(self.train_loader)
+        self._close_dataset_if_possible(self.test_loader)
+
+        self.train_loader = None
+        self.test_loader = None
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def fit(self) -> List[Dict]:
         epochs = int(self.cfg['train']['epochs'])
         history: List[Dict] = []
@@ -200,6 +239,7 @@ class Trainer:
             json.dump(final_test_metrics, f, indent=2, ensure_ascii=False)
         print("after final_test_metrics")
 
+        self.close()
         return history
 
 
