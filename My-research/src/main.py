@@ -28,9 +28,15 @@ def main():
     args = parse_args()
     cfg = load_config(args.configs)
 
+    # 打印当前使用的配置文件路径
+    config_path = Path(args.configs)
+    print(f"开始训练，当前使用的配置文件：")
+    print(f"{config_path}")
+
     set_seed(int(cfg['train'].get('seed', 42)))
     device = get_device(cfg['train'].get('device', 'auto'))
     print('Using device:', device)
+
 
     output_dir = Path(cfg['output']['root']) / str(cfg['method']['name']).lower() / str(cfg['output']['exp_name'])
     output_dir.mkdir(parents=True, exist_ok=True)
