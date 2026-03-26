@@ -1,7 +1,7 @@
-# src/utils/trainer_utils.py
+# src/utils/train_utils.py
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ def save_trainer_checkpoint(
     history: List[Dict],
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler._LRScheduler | None,
+    scheduler: Optional[torch.optim.lr_scheduler._LRScheduler],
     cfg: dict
 ):
     """保存训练器checkpoint"""
