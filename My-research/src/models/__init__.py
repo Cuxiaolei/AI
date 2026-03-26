@@ -17,14 +17,10 @@ from .mcpdg import MCPDGClassifier, MCPDGConfig
 def _common_cfg(cfg: dict):
     model_cfg = cfg['model']
     return dict(
-        feature_mode=model_cfg.get('feature_mode', 'freq'),
         num_classes=int(cfg['data']['num_classes']),
         freq_backbone_name=model_cfg.get('freq_backbone_name', 'resnet1d18'),
-        tf_backbone_name=model_cfg.get('tf_backbone_name', 'resnet18'),
         freq_in_channels=int(model_cfg.get('freq_in_channels', 1)),
-        tf_in_channels=int(model_cfg.get('tf_in_channels', 1)),
         freq_pretrained=bool(model_cfg.get('freq_pretrained', False)),
-        tf_pretrained=bool(model_cfg.get('tf_pretrained', False)),
         classifier_dropout=float(model_cfg.get('classifier_dropout', 0.0)),
         backbone_kwargs=model_cfg.get('backbone_kwargs', {}),
     )
