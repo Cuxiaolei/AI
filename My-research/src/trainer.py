@@ -2,27 +2,40 @@
 """Unified trainer for strict domain generalization baselines and meta-learning variants."""
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
+import gc
 from torch.utils.data import DataLoader
 
 from src.losses import build_classification_loss, compute_class_weights_from_loader
-from src.utils.confusion import build_label_names, export_confusion_matrix
-from src.utils.logger import ResultRecorder, build_logger
-from src.utils.metrics import classification_metrics_from_confusion, confusion_matrix_from_arrays
 from src.utils.optim import build_optimizer, build_scheduler
 from src.utils.runtime import move_batch_to_device, tqdm
-
-import gc
+from src.utils.metrics import classification_metrics_from_confusion, confusion_matrix_from_arrays
+from src.utils.train_utils import (
+    build_trainer_logger_and_recorder,
+    save_trainer_checkpoint,
+    log_train_epoch,
+    log_final_test,
+    save_final_test_metrics,
+    export_final_confusion_matrix
+)
 
 
 class Trainer:
-    def __init__(self, cfg: dict, model: torch.nn.Module, train_loader: DataLoader, test_loader: DataLoader, device: torch.device, output_dir: str | Path) -> None:
+    def __init__(
+            self,
+            cfg: dict,
+            model: torch.nn.Module,
+            train_loader: DataLoader,
+            test_loader: DataLoader,
+            device: torch.device,
+            output_dir: str
+    ) -> None:
+        # 基础配置初始化
         self.cfg = cfg
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -30,37 +43,50 @@ class Trainer:
         self.device = device
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger = build_logger(self.output_dir)
-        self.recorder = ResultRecorder(self.output_dir)
-
-        self.optimizer = build_optimizer(self.model, cfg['optimizer'])
-        sched_cfg = dict(cfg.get('scheduler', {}))
-        sched_cfg.setdefault('epochs', int(cfg['train']['epochs']))
-        self.scheduler = build_scheduler(self.optimizer, sched_cfg)
-
-        class_weights = None
-        if bool(cfg.get('loss', {}).get('use_class_weights', False)):
-            class_weights = compute_class_weights_from_loader(self.train_loader, int(cfg['data']['num_classes'])).to(device)
-        self.criterion = build_classification_loss(cfg.get('loss', {}), class_weights=class_weights)
         self.global_step = 0
 
+        # 日志/记录器初始化
+        self.logger, self.recorder = build_trainer_logger_and_recorder(self.output_dir)
+
+        # 优化器/调度器初始化
+        self.optimizer = build_optimizer(self.model, cfg['optimizer'])
+        self.scheduler = self._build_scheduler()
+
+        # 损失函数初始化（含类别权重）
+        self.criterion = self._build_criterion()
+
+    def _build_scheduler(self):
+        """构建学习率调度器"""
+        sched_cfg = dict(self.cfg.get('scheduler', {}))
+        sched_cfg.setdefault('epochs', int(self.cfg['train']['epochs']))
+        return build_scheduler(self.optimizer, sched_cfg)
+
+    def _build_criterion(self):
+        """构建分类损失函数（支持类别权重）"""
+        class_weights = None
+        if self.cfg.get('loss', {}).get('use_class_weights', False):
+            num_classes = int(self.cfg['data']['num_classes'])
+            class_weights = compute_class_weights_from_loader(self.train_loader, num_classes).to(self.device)
+        return build_classification_loss(self.cfg.get('loss', {}), class_weights=class_weights)
+
     def _compute_model_step(self, batch: Dict[str, torch.Tensor], epoch: int) -> Dict[str, torch.Tensor]:
+        """单次前向传播计算（支持模型自定义loss计算）"""
         if hasattr(self.model, 'compute_loss'):
             return self.model.compute_loss(batch, self.criterion, epoch=epoch, global_step=self.global_step)
+
         out = self.model(batch)
-        logits = out['logits']
-        y = batch['y']
-        loss = self.criterion(logits, y)
-        out['loss'] = loss
+        out['loss'] = self.criterion(out['logits'], batch['y'])
         return out
 
     @staticmethod
-    def _tensor_scalar(v) -> float | None:
+    def _tensor_to_scalar(v) -> float | None:
+        """将单元素tensor转为标量，否则返回None"""
         if torch.is_tensor(v) and v.numel() == 1:
             return float(v.detach().item())
         return None
 
     def train_one_epoch(self, epoch: int) -> Dict[str, float]:
+        """训练单个epoch并返回训练指标"""
         self.model.train()
         total_samples = 0
         total_correct = 0
@@ -69,28 +95,38 @@ class Trainer:
 
         pbar = tqdm(self.train_loader, desc=f'Train {epoch}', leave=False)
         for batch in pbar:
+            # 数据移至设备 + 梯度清零
             batch = move_batch_to_device(batch, self.device)
             self.optimizer.zero_grad(set_to_none=True)
+
+            # 前向传播 + 反向传播 + 优化
             out = self._compute_model_step(batch, epoch)
-            logits = out['logits']
-            y = batch['y']
             loss = out['loss']
             loss.backward()
             self.optimizer.step()
             self.global_step += 1
 
-            bs = y.size(0)
+            # 累计指标
+            bs = batch['y'].size(0)
             total_loss += float(loss.item()) * bs
             total_samples += bs
-            total_correct += int((logits.argmax(dim=1) == y).sum().item())
+            total_correct += int((out['logits'].argmax(dim=1) == batch['y']).sum().item())
+
+            # 累计额外指标
             for k, v in out.items():
-                if k in {'loss', 'logits', 'feature', 'feat_freq', 'feat_tf'}:
+                if k in {'loss', 'logits', 'feature', 'feat_freq'}:
                     continue
-                scalar = self._tensor_scalar(v)
+                scalar = self._tensor_to_scalar(v)
                 if scalar is not None:
                     extras_sum[k] += scalar * bs
-            pbar.set_postfix(loss=f'{loss.item():.4f}', acc=f'{total_correct/max(total_samples,1):.4f}')
 
+            # 更新进度条
+            pbar.set_postfix(
+                loss=f'{loss.item():.4f}',
+                acc=f'{total_correct / max(total_samples, 1):.4f}'
+            )
+
+        # 计算平均指标
         metrics = {
             'loss': total_loss / max(total_samples, 1),
             'acc': total_correct / max(total_samples, 1),
@@ -101,6 +137,7 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate_final(self) -> Tuple[Dict[str, float], np.ndarray]:
+        """最终评估（测试集），返回指标和混淆矩阵"""
         self.model.eval()
         total_loss = 0.0
         total_samples = 0
@@ -113,32 +150,29 @@ class Trainer:
             logits = self.model(batch)['logits']
             y = batch['y']
             loss = self.criterion(logits, y)
+
+            # 累计损失和样本数
             bs = y.size(0)
             total_loss += float(loss.item()) * bs
             total_samples += bs
+
+            # 收集预测/真实标签
             all_true.append(y.detach().cpu().numpy())
             all_pred.append(logits.argmax(dim=1).detach().cpu().numpy())
+
             pbar.set_postfix(loss=f'{loss.item():.4f}')
 
-        y_true = np.concatenate(all_true, axis=0) if all_true else np.empty((0,), dtype=np.int64)
-        y_pred = np.concatenate(all_pred, axis=0) if all_pred else np.empty((0,), dtype=np.int64)
+        # 拼接标签并计算混淆矩阵/指标
+        y_true = np.concatenate(all_true) if all_true else np.empty((0,), dtype=np.int64)
+        y_pred = np.concatenate(all_pred) if all_pred else np.empty((0,), dtype=np.int64)
         cm = confusion_matrix_from_arrays(y_true, y_pred, num_classes=int(self.cfg['data']['num_classes']))
         metrics = classification_metrics_from_confusion(cm)
         metrics['loss'] = total_loss / max(total_samples, 1)
+
         return metrics, cm
 
-    def save_checkpoint(self, epoch: int, history: List[Dict]) -> None:
-        ckpt = {
-            'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler is not None else None,
-            'history': history,
-            'config': self.cfg,
-        }
-        torch.save(ckpt, self.output_dir / 'last.pth')
-
     def _close_dataset_if_possible(self, loader: DataLoader | None) -> None:
+        """关闭数据集（如果数据集实现了close方法）"""
         if loader is None:
             return
         ds = getattr(loader, 'dataset', None)
@@ -149,61 +183,78 @@ class Trainer:
                 pass
 
     def _shutdown_dataloader_workers(self, loader: DataLoader | None) -> None:
-        """
-        尽量提前释放 DataLoader worker，减少任务结束后长时间卡顿。
-        """
+        """提前关闭DataLoader worker，减少卡顿"""
         if loader is None:
             return
         try:
             iterator = getattr(loader, '_iterator', None)
-            if iterator is not None and hasattr(iterator, '_shutdown_workers'):
+            if iterator and hasattr(iterator, '_shutdown_workers'):
                 iterator._shutdown_workers()
         except Exception:
             pass
 
     def close(self) -> None:
+        """释放资源（关闭dataloader/数据集，清理显存）"""
+        # 关闭dataloader worker
         self._shutdown_dataloader_workers(self.train_loader)
         self._shutdown_dataloader_workers(self.test_loader)
 
+        # 关闭数据集
         self._close_dataset_if_possible(self.train_loader)
         self._close_dataset_if_possible(self.test_loader)
 
+        # 清空引用
         self.train_loader = None
         self.test_loader = None
 
+        # 垃圾回收 + 清空CUDA缓存
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
     def fit(self) -> List[Dict]:
+        """主训练流程：遍历epochs训练，最终评估并保存结果"""
         epochs = int(self.cfg['train']['epochs'])
         history: List[Dict] = []
+
         for epoch in range(1, epochs + 1):
+            # 训练一个epoch
             train_metrics = self.train_one_epoch(epoch)
+
+            # 更新学习率
             if self.scheduler is not None:
                 self.scheduler.step()
-            row = {
+
+            # 记录训练结果
+            train_row = {
                 'phase': 'train',
                 'epoch': epoch,
                 'lr': self.optimizer.param_groups[0]['lr'],
                 **{f'train_{k}': v for k, v in train_metrics.items()},
             }
-            history.append(row)
-            self.recorder.append(row)
+            history.append(train_row)
+            self.recorder.append(train_row)
             self.recorder.flush()
-            if bool(self.cfg.get('output', {}).get('save_checkpoint', False)):
-                self.save_checkpoint(epoch, history)
 
-            extra_msg = ' '.join([f'{k}={v:.4f}' for k, v in train_metrics.items() if k not in {'loss','acc'}])
-            self.logger.info(
-                'epoch=%d/%d train_loss=%.4f train_acc=%.4f%s%s',
-                epoch, epochs,
-                train_metrics['loss'], train_metrics['acc'],
-                ' | ' if extra_msg else '',
-                extra_msg,
-            )
+            # 保存checkpoint（如果配置开启）
+            if self.cfg.get('output', {}).get('save_checkpoint', False):
+                save_trainer_checkpoint(
+                    output_dir=self.output_dir,
+                    epoch=epoch,
+                    history=history,
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    scheduler=self.scheduler,
+                    cfg=self.cfg
+                )
 
+            # 打印训练日志
+            log_train_epoch(self.logger, epoch, epochs, train_metrics)
+
+        # 最终测试
         final_metrics, cm = self.evaluate_final()
+
+        # 记录最终测试结果
         final_row = {
             'phase': 'final_test',
             'epoch': epochs,
@@ -213,29 +264,21 @@ class Trainer:
         self.recorder.append(final_row)
         self.recorder.flush()
 
-        label_map = None
-        if hasattr(self.test_loader.dataset, 'get_label_map'):
-            label_map = self.test_loader.dataset.get_label_map()
-        label_names = build_label_names(int(self.cfg['data']['num_classes']), label_map=label_map)
-        export_confusion_matrix(cm, label_names, self.output_dir / 'confusion_matrices', stem='confusion_matrix_last')
-
-
-        self.logger.info(
-            'final_target_test loss=%.4f acc=%.4f precision_macro=%.4f recall_macro=%.4f f1_macro=%.4f',
-            final_metrics['loss'], final_metrics['acc'], final_metrics['precision_macro'],
-            final_metrics['recall_macro'], final_metrics['f1_macro'],
+        # 导出混淆矩阵
+        export_final_confusion_matrix(
+            cm=cm,
+            test_loader=self.test_loader,
+            num_classes=int(self.cfg['data']['num_classes']),
+            output_dir=self.output_dir
         )
 
-        # 单独保存最终测试指标
-        final_test_metrics = {
-            'phase': 'final_test',
-            'epoch': epochs,
-            **{k: float(v) for k, v in final_metrics.items()}
-        }
-        with open(self.output_dir / 'final_test_metrics.json', 'w', encoding='utf-8') as f:
-            json.dump(final_test_metrics, f, indent=2, ensure_ascii=False)
+        # 打印最终测试日志
+        log_final_test(self.logger, final_metrics)
 
+        # 保存最终测试指标
+        save_final_test_metrics(self.output_dir, epochs, final_metrics)
+
+        # 释放资源
         self.close()
+
         return history
-
-

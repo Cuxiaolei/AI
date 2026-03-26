@@ -17,49 +17,39 @@ from src.utils.runtime import get_device, set_seed
 
 
 
-
-def parse_args():
-    parser = argparse.ArgumentParser(description='Unified strict DG training entry.')
-    parser.add_argument('--configs', type=str, required=True, help='Path to model config yaml.')
-    return parser.parse_args()
-
-
 def main():
-    args = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--configs', type=str, required=True)
+    args = parser.parse_args()
     cfg = load_config(args.configs)
 
-    # 打印当前使用的配置文件路径
+    # 打印相关信息
     config_path = Path(args.configs)
-    print(f"开始训练，当前使用的配置文件：")
-    print(f"{config_path}")
-
-    set_seed(int(cfg['train'].get('seed', 42)))
     device = get_device(cfg['train'].get('device', 'auto'))
+    print(f"开始训练，当前使用的配置文件：{config_path}")
     print('Using device:', device)
 
-
+    set_seed(cfg['train']['seed'])
     output_dir = Path(cfg['output']['root']) / str(cfg['method']['name']).lower() / str(cfg['output']['exp_name'])
     output_dir.mkdir(parents=True, exist_ok=True)
     dump_yaml(cfg, output_dir / 'merged_config.yaml')
 
-    dataset_kwargs = {
-        'feature_mode': cfg['model']['feature_mode'],
-        'to_tensor': True,
-    }
     num_workers = int(cfg['data'].get('num_workers', 0))
     pin_memory = bool(cfg['data'].get('pin_memory', True)) and device.type == 'cuda'
     batch_size = int(cfg['train']['batch_size'])
     test_batch_size = int(cfg['train'].get('test_batch_size', batch_size))
 
+
     train_dataset = build_dataset(
         h5_path=cfg['data']['train_h5'],
         dataset_name=cfg['data']['dataset_name'],
-        **dataset_kwargs,
+        to_tensor=True
     )
+
     test_dataset = build_dataset(
         h5_path=cfg['data']['test_h5'],
         dataset_name=cfg['data']['dataset_name'],
-        **dataset_kwargs,
+        to_tensor=True
     )
 
     batch_sampler = build_train_batch_sampler(
