@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Any
 from torch.utils.data import DataLoader
 
-from .base_h5_dataset import UnifiedH5Dataset
-from .phm2009_dataset import PHM2009H5Dataset
-from .pu_dataset import PUH5Dataset
+from src.datasets.base_h5_dataset import UnifiedH5Dataset
+from src.datasets.dataset_phm import PHM2009H5Dataset
+from src.datasets.dataset_pu import PUH5Dataset
 
 # 数据集注册表（已删除CWRU）
 DATASET_REGISTRY = {
