@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -79,7 +79,7 @@ class Trainer:
         return out
 
     @staticmethod
-    def _tensor_to_scalar(v) -> float | None:
+    def _tensor_to_scalar(v) -> Optional[float]:
         """将单元素tensor转为标量，否则返回None"""
         if torch.is_tensor(v) and v.numel() == 1:
             return float(v.detach().item())
@@ -171,7 +171,7 @@ class Trainer:
 
         return metrics, cm
 
-    def _close_dataset_if_possible(self, loader: DataLoader | None) -> None:
+    def _close_dataset_if_possible(self, loader: Optional[DataLoader]) -> None:
         """关闭数据集（如果数据集实现了close方法）"""
         if loader is None:
             return
@@ -182,7 +182,7 @@ class Trainer:
             except Exception:
                 pass
 
-    def _shutdown_dataloader_workers(self, loader: DataLoader | None) -> None:
+    def _shutdown_dataloader_workers(self, loader: Optional[DataLoader]) -> None:
         """提前关闭DataLoader worker，减少卡顿"""
         if loader is None:
             return
@@ -250,10 +250,8 @@ class Trainer:
 
             # 打印训练日志
             log_train_epoch(self.logger, epoch, epochs, train_metrics)
-
         # 最终测试
         final_metrics, cm = self.evaluate_final()
-
         # 记录最终测试结果
         final_row = {
             'phase': 'final_test',
@@ -263,7 +261,6 @@ class Trainer:
         history.append(final_row)
         self.recorder.append(final_row)
         self.recorder.flush()
-
         # 导出混淆矩阵
         export_final_confusion_matrix(
             cm=cm,
@@ -271,14 +268,10 @@ class Trainer:
             num_classes=int(self.cfg['data']['num_classes']),
             output_dir=self.output_dir
         )
-
         # 打印最终测试日志
         log_final_test(self.logger, final_metrics)
-
         # 保存最终测试指标
         save_final_test_metrics(self.output_dir, epochs, final_metrics)
-
         # 释放资源
         self.close()
-
         return history
