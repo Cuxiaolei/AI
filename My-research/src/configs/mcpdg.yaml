@@ -9,29 +9,10 @@ method:
   name: mcpdg
 
 model:
-  # =========================
-  # 输入模态选择
-  # freq: 只使用频域输入
-  # tf:   只使用时频图输入
-  # both: 同时使用频域和时频图
-  # =========================
   feature_mode: freq
-
-  # =========================
-  # 1D 频域 backbone 配置
-  # 当前 feature_mode=freq 时，主要使用这一组
-  # =========================
   freq_backbone_name: resnet1d18
   freq_in_channels: 1
   freq_pretrained: false
-
-  # =========================
-  # 2D 时频图 backbone 配置
-  # 当前 feature_mode=freq 时，这一组仅保留兼容性，不实际参与训练
-  # =========================
-  tf_backbone_name: resnet18
-  tf_in_channels: 1
-  tf_pretrained: false
 
   # =========================
   # backbone 通用附加参数
