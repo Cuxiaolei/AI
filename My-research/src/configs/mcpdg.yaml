@@ -8,6 +8,14 @@ data:
 method:
   name: mcpdg
 
+sampler:
+  enabled: true
+  name: meta_domain_batch_sampler
+  domains_per_batch: 3
+  samples_per_domain: null
+  shuffle: false
+  drop_last: false
+
 model:
   feature_mode: freq
   freq_backbone_name: resnet1d18
