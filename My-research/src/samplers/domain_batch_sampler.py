@@ -43,8 +43,13 @@ class MetaDomainBatchSampler(BatchSampler):
         self.debug_max_batches = int(debug_max_batches)
         self.debug_print_indices = bool(debug_print_indices)
 
+        # 获取有几个域、每个域多少样本、每个类被多少个
         domains = list(map(int, dataset.get_all_domains().tolist()))
         self.sample_domains: List[int] = domains
+        if not hasattr(dataset, 'get_all_labels'):
+            raise ValueError('MetaDomainBatchSampler requires dataset.get_all_labels() for class-level debug.')
+        labels = list(map(int, dataset.get_all_labels().tolist()))
+        self.sample_labels: List[int] = labels
 
         self.domain_to_indices: Dict[int, List[int]] = defaultdict(list)
         for idx, d in enumerate(domains):
@@ -88,11 +93,11 @@ class MetaDomainBatchSampler(BatchSampler):
         return pools
 
     def _debug_print_batch(
-        self,
-        batch_id: int,
-        chosen_domains: List[int],
-        batch: List[int],
-        taken_per_domain: Dict[int, List[int]],
+            self,
+            batch_id: int,
+            chosen_domains: List[int],
+            batch: List[int],
+            taken_per_domain: Dict[int, List[int]],
     ) -> None:
         if not self.debug:
             return
@@ -109,10 +114,24 @@ class MetaDomainBatchSampler(BatchSampler):
 
         for d in chosen_domains:
             indices_d = taken_per_domain[d]
-            print(
-                f"  domain={d} -> picked {len(indices_d)} samples"
-                + (f" indices={indices_d}" if self.debug_print_indices else "")
-            )
+            labels_d = [self.sample_labels[idx] for idx in indices_d]
+            class_counter = Counter(labels_d)
+
+            print(f"  domain={d} -> picked {len(indices_d)} samples")
+            print(f"    class_count={dict(sorted(class_counter.items()))}")
+
+            if self.debug_print_indices:
+                class_to_indices = defaultdict(list)
+                for idx in indices_d:
+                    y = self.sample_labels[idx]
+                    class_to_indices[y].append(idx)
+
+                for cls_id in sorted(class_to_indices.keys()):
+                    print(
+                        f"    class={cls_id} -> "
+                        f"num={len(class_to_indices[cls_id])}, "
+                        f"indices={class_to_indices[cls_id]}"
+                    )
 
     def __iter__(self) -> Iterator[List[int]]:
         rng = random.Random(self.seed + self.epoch)
