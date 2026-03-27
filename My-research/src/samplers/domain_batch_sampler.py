@@ -25,6 +25,11 @@ class MetaDomainBatchSampler(BatchSampler):
         debug: bool = False,
         debug_max_batches: int = 10,
         debug_print_indices: bool = False,
+        class_aware: bool = False,
+        normal_label: int = 0,
+        min_per_fault_class: int = 1,
+        oversample_minority: bool = True,
+
     ) -> None:
         if not hasattr(dataset, 'get_all_domains'):
             raise ValueError('MetaDomainBatchSampler requires dataset.get_all_domains().')
@@ -43,6 +48,18 @@ class MetaDomainBatchSampler(BatchSampler):
         self.debug_max_batches = int(debug_max_batches)
         self.debug_print_indices = bool(debug_print_indices)
 
+        self.class_aware = bool(class_aware)
+        self.normal_label = int(normal_label)
+        self.min_per_fault_class = int(min_per_fault_class)
+        self.oversample_minority = bool(oversample_minority)
+        if not hasattr(dataset, 'get_all_labels'):
+            raise ValueError('MetaDomainBatchSampler requires dataset.get_all_labels().')
+        labels = list(map(int, dataset.get_all_labels().tolist()))
+        self.sample_labels = labels
+        self.domain_to_class_to_indices = defaultdict(lambda: defaultdict(list))
+        for idx, (d, y) in enumerate(zip(self.sample_domains, self.sample_labels)):
+            self.domain_to_class_to_indices[d][y].append(idx)
+
         # 获取有几个域、每个域多少样本、每个类被多少个
         domains = list(map(int, dataset.get_all_domains().tolist()))
         self.sample_domains: List[int] = domains
@@ -56,6 +73,8 @@ class MetaDomainBatchSampler(BatchSampler):
             self.domain_to_indices[d].append(idx)
 
         self.domain_ids = sorted(self.domain_to_indices.keys())
+
+
 
         if len(self.domain_ids) < 2:
             raise ValueError('MetaDomainBatchSampler needs at least 2 source domains in train dataset.')
@@ -156,20 +175,7 @@ class MetaDomainBatchSampler(BatchSampler):
             taken_per_domain: Dict[int, List[int]] = {}
 
             for d in chosen_domains:
-                need = self.samples_per_domain
-                take: List[int] = []
-
-                while need > 0:
-                    if len(pools[d]) == 0:
-                        pools[d] = list(self.domain_to_indices[d])
-                        if self.shuffle:
-                            rng.shuffle(pools[d])
-
-                    n_take = min(need, len(pools[d]))
-                    take.extend(pools[d][:n_take])
-                    pools[d] = pools[d][n_take:]
-                    need -= n_take
-
+                take = self._sample_indices_for_domain(d, rng)
                 taken_per_domain[d] = list(take)
                 batch.extend(take)
 
@@ -198,3 +204,77 @@ class MetaDomainBatchSampler(BatchSampler):
         if self.drop_last:
             return n // bs
         return math.ceil(n / bs)
+
+    def _sample_with_replacement(self, pool, k, rng):
+        if len(pool) == 0:
+            return []
+        if len(pool) >= k:
+            if self.shuffle:
+                return rng.sample(pool, k)
+            return list(pool[:k])
+
+        out = []
+        while len(out) < k:
+            need = k - len(out)
+            if self.shuffle:
+                out.extend(rng.choices(pool, k=need))
+            else:
+                out.extend(pool[:need])
+        return out[:k]
+
+    def _sample_indices_for_domain(self, domain_id, rng):
+        # 默认：原始随机采样
+        if not self.class_aware:
+            need = self.samples_per_domain
+            take = []
+            pool = list(self.domain_to_indices[domain_id])
+
+            while need > 0:
+                if len(pool) == 0:
+                    pool = list(self.domain_to_indices[domain_id])
+                    if self.shuffle:
+                        rng.shuffle(pool)
+
+                n_take = min(need, len(pool))
+                take.extend(pool[:n_take])
+                pool = pool[n_take:]
+                need -= n_take
+
+            return take
+
+        # 类别感知采样
+        class_to_indices = self.domain_to_class_to_indices[domain_id]
+        fault_classes = sorted([c for c in class_to_indices.keys() if c != self.normal_label])
+
+        take = []
+
+        # 先保证每个故障类至少来 min_per_fault_class 个
+        for cls in fault_classes:
+            k = self.min_per_fault_class
+            if k <= 0:
+                continue
+            take.extend(self._sample_with_replacement(class_to_indices[cls], k, rng))
+
+        # 如果已经超过配额，直接截断
+        if len(take) >= self.samples_per_domain:
+            if self.shuffle:
+                rng.shuffle(take)
+            return take[:self.samples_per_domain]
+
+        # 剩余位置优先补正常类
+        remain = self.samples_per_domain - len(take)
+        normal_pool = class_to_indices.get(self.normal_label, [])
+
+        if len(normal_pool) > 0:
+            take.extend(self._sample_with_replacement(normal_pool, remain, rng))
+        else:
+            # 没有正常类，就从所有类补
+            all_pool = []
+            for idxs in class_to_indices.values():
+                all_pool.extend(idxs)
+            take.extend(self._sample_with_replacement(all_pool, remain, rng))
+
+        if self.shuffle:
+            rng.shuffle(take)
+
+        return take[:self.samples_per_domain]

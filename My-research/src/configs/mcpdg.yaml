@@ -16,9 +16,15 @@ sampler:
   samples_per_domain: null
   shuffle: false
   drop_last: false
+
   debug: true
   debug_max_batches: 20
   debug_print_indices: false
+
+  class_aware: true
+  normal_label: 0
+  min_per_fault_class: 1
+  oversample_minority: true
 
 model:
   feature_mode: freq
