@@ -36,8 +36,8 @@ class BaseDGClassifier(nn.Module):
     def __init__(self, config: BaseDGConfig):
         super().__init__()
         self.config = config
+        self.num_classes = int(config.num_classes)
 
-        # 构建backbone（仅freq）
         self.freq_backbone = self._build_backbone(
             backbone_name=config.freq_backbone_name,
             in_channels=config.freq_in_channels,
@@ -45,16 +45,16 @@ class BaseDGClassifier(nn.Module):
             **config.backbone_kwargs
         )
 
-        # 分类器
+        self.feat_dim = int(self.freq_backbone.out_dim)
+
         self.classifier = LinearClassifier(
-            in_dim=self.freq_backbone.out_dim,
-            num_classes=config.num_classes,
+            in_dim=self.feat_dim,
+            num_classes=self.num_classes,
             dropout=config.classifier_dropout
         )
 
     def _build_backbone(self, backbone_name, in_channels=1, pretrained=False, **kwargs):
-        """根据名称构建1D backbone"""
-        # 你自己的build_backbone实现
+        # 根据名称构建1D backbone
         backbones = {
             "resnet1d18": resnet1d18,
             "resnet1d34": resnet1d34,
@@ -63,25 +63,25 @@ class BaseDGClassifier(nn.Module):
         return backbones[backbone_name](in_channels=in_channels, **kwargs)
 
     def extract_freq_feature(self, x_freq: torch.Tensor) -> torch.Tensor:
-        """提取频域特征"""
+        # 提取频域特征
         return self.freq_backbone(x_freq)
 
     def extract_features(self, batch):
-        """对外接口：仅提取频域特征"""
+        # 对外接口：仅提取频域特征
         x_freq = batch["x_freq"]
         feat = self.extract_freq_feature(x_freq)
         return {"feature": feat}
 
     def forward_logits(self, feature):
-        """特征 -> 分类结果"""
+        # 特征 -> 分类结果
         return self.classifier(feature)
 
     def forward(self, batch):
-        """完整前向"""
+        # 完整前向
         feats = self.extract_features(batch)
         logits = self.forward_logits(feats["feature"])
         return {**feats, "logits": logits}
 
     def compute_loss(self, outputs, batch):
-        """子类实现损失"""
+        # 子类实现损失
         raise NotImplementedError

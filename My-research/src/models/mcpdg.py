@@ -300,8 +300,6 @@ class MCPDGClassifier(BaseDGClassifier):
         return {
             "logits": out["logits"],
             "feature": out["feature"],
-            **({"feat_freq": out["feat_freq"]} if "feat_freq" in out else {}),
-            **({"feat_tf": out["feat_tf"]} if "feat_tf" in out else {}),
         }
 
     # -----------------------------------------------------
@@ -322,8 +320,6 @@ class MCPDGClassifier(BaseDGClassifier):
             return {
                 "logits": full_out["logits"],
                 "feature": full_out["feature"],
-                **({"feat_freq": full_out["feat_freq"]} if "feat_freq" in full_out else {}),
-                **({"feat_tf": full_out["feat_tf"]} if "feat_tf" in full_out else {}),
                 "loss": stat["loss"],
                 "loss_cls": stat["loss_cls"],
                 "loss_cls_linear": stat["loss_cls_linear"],
@@ -338,8 +334,6 @@ class MCPDGClassifier(BaseDGClassifier):
             return {
                 "logits": full_out["logits"],
                 "feature": full_out["feature"],
-                **({"feat_freq": full_out["feat_freq"]} if "feat_freq" in full_out else {}),
-                **({"feat_tf": full_out["feat_tf"]} if "feat_tf" in full_out else {}),
                 "loss": stat["loss"],
                 "loss_cls": stat["loss_cls"],
                 "loss_cls_linear": stat["loss_cls_linear"],
@@ -359,10 +353,8 @@ class MCPDGClassifier(BaseDGClassifier):
         total_loss = train_stat["loss"] + self.meta_test_weight * test_stat["loss"]
 
         return {
-            "logits": full_out["logits"],   # for Trainer accuracy on whole batch
+            "logits": full_out["logits"],
             "feature": full_out["feature"],
-            **({"feat_freq": full_out["feat_freq"]} if "feat_freq" in full_out else {}),
-            **({"feat_tf": full_out["feat_tf"]} if "feat_tf" in full_out else {}),
             "loss": total_loss,
 
             "loss_cls_train": train_stat["loss_cls"],

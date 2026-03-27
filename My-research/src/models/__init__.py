@@ -10,7 +10,6 @@ from .groupdro import GroupDROClassifier, GroupDROConfig
 from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
 from .dpjdg import DPJDGClassifier, DPJDGConfig
-from .mcpdg2 import MCPDGClassifier, MCPDGConfig
 from .mcpdg import MCPDGClassifier, MCPDGConfig
 
 
