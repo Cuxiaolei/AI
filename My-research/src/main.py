@@ -68,6 +68,7 @@ def main():
             persistent_workers=(num_workers > 0),
         )
     else:
+        print("no batch sampler")
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
@@ -89,7 +90,9 @@ def main():
     )
 
     model = build_method(cfg)
-    if hasattr(model, 'set_condition_lookup'):
+
+    method_name = str(cfg['method']['name']).lower()
+    if method_name == 'mcpdg':
         condition_table, meta = build_condition_table_from_datasets(
             train_dataset=train_dataset,
             test_dataset=test_dataset,
@@ -97,7 +100,6 @@ def main():
         )
         model.set_condition_lookup(condition_table)
         print(f"[Condition] table shape={tuple(condition_table.shape)} dataset={meta['dataset_name']}")
-
     trainer = Trainer(cfg, model, train_loader, test_loader, device, output_dir)
     trainer.fit()
 

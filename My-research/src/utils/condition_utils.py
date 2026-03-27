@@ -189,12 +189,6 @@ def build_condition_table_from_datasets(
     test_dataset,
     dataset_name: str,
 ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-    """
-    这是主函数直接调用的接口。
-    返回：
-        condition_table: torch.Tensor, shape [max_domain_id + 1, 3]
-        meta: dict
-    """
     domain_id_to_name = _merge_domain_maps(train_dataset, test_dataset)
     return build_condition_table(
         domain_id_to_name=domain_id_to_name,

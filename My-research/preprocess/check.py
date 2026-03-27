@@ -333,7 +333,7 @@ def inspect_root_level_datasets(f: h5py.File) -> None:
 
 def main() -> None:
 
-    h5_path = Path("PHM_spur/PHM_spur8_T5_300-5/train.h5")
+    h5_path = Path(r"D:\user\Documents\ai\paper\1_process\outputs\preprocess\pu\pu_T5_5\train.h5")
     if not h5_path.exists():
         raise FileNotFoundError(f"File not found: {h5_path}")
 
