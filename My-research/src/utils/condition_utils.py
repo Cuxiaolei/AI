@@ -130,6 +130,17 @@ def _merge_domain_maps(
     """
     merged: Dict[int, str] = {}
 
+    # 调试：打印数据集的 attrs 信息
+    for name, ds in [("train", train_dataset), ("test", test_dataset)]:
+        attrs = _get_dataset_attrs(ds)
+        print(f"=== {name} dataset attrs ===")
+        print(f"attrs keys: {list(attrs.keys())}")
+        print(f"domain_map exists: {'domain_map' in attrs}")
+        if "domain_map" in attrs:
+            print(f"domain_map value: {attrs['domain_map']}")
+            print(f"domain_map type: {type(attrs['domain_map'])}")
+
+
     for ds in [train_dataset, test_dataset]:
         cur = _collect_domain_map_from_dataset(ds)
         for domain_id, cond_name in cur.items():
@@ -161,6 +172,9 @@ def build_condition_table(
     table = torch.zeros(max_domain_id + 1, COND_DIM, dtype=torch.float32)
 
     parsed: Dict[int, Dict[str, Any]] = {}
+
+
+
     for domain_id, cond_name in sorted(domain_id_to_name.items(), key=lambda x: x[0]):
         cond_vec = parse_condition(dataset_name, cond_name)
         if cond_vec.numel() != COND_DIM:
