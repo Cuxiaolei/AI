@@ -48,17 +48,7 @@ class MetaDomainBatchSampler(BatchSampler):
         self.debug_max_batches = int(debug_max_batches)
         self.debug_print_indices = bool(debug_print_indices)
 
-        self.class_aware = bool(class_aware)
-        self.normal_label = int(normal_label)
-        self.min_per_fault_class = int(min_per_fault_class)
-        self.oversample_minority = bool(oversample_minority)
-        if not hasattr(dataset, 'get_all_labels'):
-            raise ValueError('MetaDomainBatchSampler requires dataset.get_all_labels().')
-        labels = list(map(int, dataset.get_all_labels().tolist()))
-        self.sample_labels = labels
-        self.domain_to_class_to_indices = defaultdict(lambda: defaultdict(list))
-        for idx, (d, y) in enumerate(zip(self.sample_domains, self.sample_labels)):
-            self.domain_to_class_to_indices[d][y].append(idx)
+
 
         # 获取有几个域、每个域多少样本、每个类被多少个
         domains = list(map(int, dataset.get_all_domains().tolist()))
@@ -74,7 +64,17 @@ class MetaDomainBatchSampler(BatchSampler):
 
         self.domain_ids = sorted(self.domain_to_indices.keys())
 
-
+        self.class_aware = bool(class_aware)
+        self.normal_label = int(normal_label)
+        self.min_per_fault_class = int(min_per_fault_class)
+        self.oversample_minority = bool(oversample_minority)
+        if not hasattr(dataset, 'get_all_labels'):
+            raise ValueError('MetaDomainBatchSampler requires dataset.get_all_labels().')
+        labels = list(map(int, dataset.get_all_labels().tolist()))
+        self.sample_labels = labels
+        self.domain_to_class_to_indices = defaultdict(lambda: defaultdict(list))
+        for idx, (d, y) in enumerate(zip(self.sample_domains, self.sample_labels)):
+            self.domain_to_class_to_indices[d][y].append(idx)
 
         if len(self.domain_ids) < 2:
             raise ValueError('MetaDomainBatchSampler needs at least 2 source domains in train dataset.')
