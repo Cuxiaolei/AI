@@ -33,7 +33,7 @@ class Trainer:
             train_loader: DataLoader,
             test_loader: DataLoader,
             device: torch.device,
-            output_dir: str
+            output_dir: Path
     ) -> None:
         # 基础配置初始化
         self.cfg = cfg
@@ -41,7 +41,7 @@ class Trainer:
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.device = device
-        self.output_dir = Path(output_dir)
+        self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.global_step = 0
 
