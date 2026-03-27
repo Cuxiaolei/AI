@@ -8,6 +8,7 @@ data:
 method:
   name: mcpdg
 
+
 sampler:
   enabled: true
   name: meta_domain_batch_sampler
@@ -15,6 +16,9 @@ sampler:
   samples_per_domain: null
   shuffle: false
   drop_last: false
+  debug: true
+  debug_max_batches: 20
+  debug_print_indices: false
 
 model:
   feature_mode: freq
@@ -91,6 +95,9 @@ model:
   meta_test_domains: 1
   meta_randomize: true
   meta_split_seed: 42
+
+  meta_debug: true
+  meta_debug_max_steps: 20
 
 output:
   root: outputs

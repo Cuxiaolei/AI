@@ -120,9 +120,11 @@ class MCPDGClassifier(BaseDGClassifier):
 
         self.meta_splitter = DomainMetaSplitter(
             DomainMetaSplitConfig(
-                meta_test_domains=int(cfg.meta_test_domains),
-                randomize=bool(cfg.meta_randomize),
-                seed=int(cfg.meta_split_seed),
+                meta_test_domains=cfg.meta_test_domains,
+                randomize=cfg.meta_randomize,
+                seed=cfg.meta_split_seed,
+                debug=getattr(cfg, "meta_debug", False),
+                debug_max_steps=getattr(cfg, "meta_debug_max_steps", 20),
             )
         )
 

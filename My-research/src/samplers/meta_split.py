@@ -13,14 +13,12 @@ class DomainMetaSplitConfig:
     meta_test_domains: int = 1
     randomize: bool = True
     seed: int = 42
+    debug: bool = False
+    debug_max_steps: int = 20
 
 
 class DomainMetaSplitter:
-    """Split a batch into meta-train and meta-test subsets by domain.
-
-    This is a reusable component for source-only meta-learning methods.
-    It assumes the batch contains a ``domain`` tensor of shape [B].
-    """
+    """Split a batch into meta-train and meta-test subsets by domain."""
 
     def __init__(self, cfg: DomainMetaSplitConfig) -> None:
         self.cfg = cfg
@@ -43,16 +41,19 @@ class DomainMetaSplitter:
         domains = batch.get('domain', None)
         if domains is None:
             return None
+
         unique_domains = torch.unique(domains)
         if int(unique_domains.numel()) < 2:
             return None
 
         n_meta_test = max(1, min(int(self.cfg.meta_test_domains), int(unique_domains.numel()) - 1))
+
         if self.cfg.randomize:
             g = torch.Generator(device=unique_domains.device)
             g.manual_seed(int(self.cfg.seed) + int(step))
             perm = torch.randperm(int(unique_domains.numel()), generator=g, device=unique_domains.device)
             unique_domains = unique_domains[perm]
+
         meta_test_domains = unique_domains[:n_meta_test]
         meta_train_domains = unique_domains[n_meta_test:]
 
@@ -63,6 +64,14 @@ class DomainMetaSplitter:
 
         if int(meta_train_mask.sum().item()) == 0 or int(meta_test_mask.sum().item()) == 0:
             return None
+
+        if self.cfg.debug and step < int(self.cfg.debug_max_steps):
+            print(f"\n[MetaSplit][Step {step}]")
+            print(f"  batch_unique_domains={torch.unique(domains).detach().cpu().tolist()}")
+            print(f"  meta_train_domains={meta_train_domains.detach().cpu().tolist()}")
+            print(f"  meta_test_domains={meta_test_domains.detach().cpu().tolist()}")
+            print(f"  meta_train_size={int(meta_train_mask.sum().item())}")
+            print(f"  meta_test_size={int(meta_test_mask.sum().item())}")
 
         return (
             self.subset_batch(batch, meta_train_mask),

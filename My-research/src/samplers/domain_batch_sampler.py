@@ -1,41 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Common batch sampler for source-only meta-learning.
-
-This sampler tries to ensure that each training batch contains samples from
-multiple source domains, which is important for methods such as MLDG and for
-future source-only episodic/meta-learning methods.
-"""
+"""Common batch sampler for source-only meta-learning."""
 from __future__ import annotations
 
 import math
 import random
-from collections import defaultdict
-from typing import Dict, Iterable, Iterator, List, Sequence
+from collections import defaultdict, Counter
+from typing import Dict, Iterator, List
 
 from torch.utils.data import BatchSampler, Dataset
 
 
 class MetaDomainBatchSampler(BatchSampler):
-    """Build mini-batches with multiple source domains.
-
-    Parameters
-    ----------
-    dataset:
-        Dataset that provides ``get_all_domains()``.
-    batch_size:
-        Total batch size.
-    domains_per_batch:
-        Number of distinct domains to include in one batch.
-    samples_per_domain:
-        Optional number of samples per chosen domain. If ``None``, it is
-        computed as ``batch_size // domains_per_batch``.
-    shuffle:
-        Whether to shuffle domain order and domain-local indices each epoch.
-    drop_last:
-        Whether to drop incomplete final batches.
-    seed:
-        Base random seed.
-    """
+    """Build mini-batches with multiple source domains."""
 
     def __init__(
         self,
@@ -46,9 +22,13 @@ class MetaDomainBatchSampler(BatchSampler):
         shuffle: bool = True,
         drop_last: bool = False,
         seed: int = 42,
+        debug: bool = False,
+        debug_max_batches: int = 10,
+        debug_print_indices: bool = False,
     ) -> None:
         if not hasattr(dataset, 'get_all_domains'):
             raise ValueError('MetaDomainBatchSampler requires dataset.get_all_domains().')
+
         self.dataset = dataset
         self.batch_size = int(batch_size)
         self.domains_per_batch = int(domains_per_batch)
@@ -58,11 +38,20 @@ class MetaDomainBatchSampler(BatchSampler):
         self.seed = int(seed)
         self.epoch = 0
 
+        # debug options
+        self.debug = bool(debug)
+        self.debug_max_batches = int(debug_max_batches)
+        self.debug_print_indices = bool(debug_print_indices)
+
         domains = list(map(int, dataset.get_all_domains().tolist()))
+        self.sample_domains: List[int] = domains
+
         self.domain_to_indices: Dict[int, List[int]] = defaultdict(list)
         for idx, d in enumerate(domains):
             self.domain_to_indices[d].append(idx)
+
         self.domain_ids = sorted(self.domain_to_indices.keys())
+
         if len(self.domain_ids) < 2:
             raise ValueError('MetaDomainBatchSampler needs at least 2 source domains in train dataset.')
         if self.domains_per_batch < 2:
@@ -72,7 +61,19 @@ class MetaDomainBatchSampler(BatchSampler):
 
         if self.samples_per_domain is None:
             self.samples_per_domain = max(1, self.batch_size // self.domains_per_batch)
+
         self.effective_batch_size = self.samples_per_domain * self.domains_per_batch
+
+        if self.debug:
+            print(
+                f"[Sampler Init] total_samples={len(self.dataset)} "
+                f"domain_ids={self.domain_ids} "
+                f"domains_per_batch={self.domains_per_batch} "
+                f"samples_per_domain={self.samples_per_domain} "
+                f"effective_batch_size={self.effective_batch_size}"
+            )
+            for d in self.domain_ids:
+                print(f"[Sampler Init] domain={d} num_samples={len(self.domain_to_indices[d])}")
 
     def set_epoch(self, epoch: int) -> None:
         self.epoch = int(epoch)
@@ -86,14 +87,44 @@ class MetaDomainBatchSampler(BatchSampler):
             pools[d] = items
         return pools
 
+    def _debug_print_batch(
+        self,
+        batch_id: int,
+        chosen_domains: List[int],
+        batch: List[int],
+        taken_per_domain: Dict[int, List[int]],
+    ) -> None:
+        if not self.debug:
+            return
+        if batch_id >= self.debug_max_batches:
+            return
+
+        batch_domain_list = [self.sample_domains[idx] for idx in batch]
+        batch_domain_counter = Counter(batch_domain_list)
+
+        print(f"\n[Sampler][Epoch {self.epoch}][Batch {batch_id}]")
+        print(f"  chosen_domains={chosen_domains}")
+        print(f"  batch_size={len(batch)}")
+        print(f"  domain_count_in_batch={dict(sorted(batch_domain_counter.items()))}")
+
+        for d in chosen_domains:
+            indices_d = taken_per_domain[d]
+            print(
+                f"  domain={d} -> picked {len(indices_d)} samples"
+                + (f" indices={indices_d}" if self.debug_print_indices else "")
+            )
+
     def __iter__(self) -> Iterator[List[int]]:
         rng = random.Random(self.seed + self.epoch)
         pools = self._build_pools(rng)
         domain_cycle = list(self.domain_ids)
+
         if self.shuffle:
             rng.shuffle(domain_cycle)
 
         remaining = sum(len(v) for v in pools.values())
+        batch_id = 0
+
         while remaining > 0:
             # choose distinct domains for current batch
             if self.shuffle:
@@ -103,31 +134,44 @@ class MetaDomainBatchSampler(BatchSampler):
                 domain_cycle = domain_cycle[self.domains_per_batch:] + chosen_domains
 
             batch: List[int] = []
+            taken_per_domain: Dict[int, List[int]] = {}
+
             for d in chosen_domains:
                 need = self.samples_per_domain
                 take: List[int] = []
+
                 while need > 0:
                     if len(pools[d]) == 0:
-                        # refill this domain pool to allow oversampling when needed
                         pools[d] = list(self.domain_to_indices[d])
                         if self.shuffle:
                             rng.shuffle(pools[d])
+
                     n_take = min(need, len(pools[d]))
                     take.extend(pools[d][:n_take])
                     pools[d] = pools[d][n_take:]
                     need -= n_take
+
+                taken_per_domain[d] = list(take)
                 batch.extend(take)
 
             if self.shuffle:
                 rng.shuffle(batch)
 
+            self._debug_print_batch(
+                batch_id=batch_id,
+                chosen_domains=chosen_domains,
+                batch=batch,
+                taken_per_domain=taken_per_domain,
+            )
+
             if len(batch) < self.effective_batch_size and self.drop_last:
                 break
+
             if len(batch) > 0:
                 yield batch
 
-            # rough progress accounting
             remaining -= min(self.effective_batch_size, remaining)
+            batch_id += 1
 
     def __len__(self) -> int:
         n = len(self.dataset)
