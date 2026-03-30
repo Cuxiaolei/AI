@@ -14,17 +14,28 @@ sampler:
   name: meta_domain_batch_sampler
   domains_per_batch: 3
   samples_per_domain: null
-  shuffle: false
+
+  # 3 个源域时：2 个 support 域，1 个 query 域
+  support_domains: 2
+
+  # support 比 query 大，方便模型里自动切分
+  support_samples_per_domain: 12
+  query_samples_per_domain: 8
+
+  # support：轻量增强故障类
+  support_fault_ratio: 0.33
+
+  # query：仅极轻故障保底 + 接近自然长尾
+  query_min_fault: 1
+  query_temp: 0.9
+
+  normal_label: 0
+  shuffle: true
   drop_last: false
+  seed: 42
 
   debug: true
   debug_max_batches: 20
-  debug_print_indices: false
-
-  class_aware: true
-  normal_label: 0
-  min_per_fault_class: 1
-  oversample_minority: true
 
 model:
   feature_mode: freq
@@ -78,7 +89,7 @@ model:
   # =========================
   align_weight: 1.0
   pcl_weight: 0.2
-  meta_test_weight: 1.0
+  meta_test_weight: 0.1
   pcl_temperature: 0.1
   imbalance_power: 0.5
 

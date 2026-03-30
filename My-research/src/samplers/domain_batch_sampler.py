@@ -188,15 +188,14 @@ class MetaDomainBatchSampler(BatchSampler):
                 batch=batch,
                 taken_per_domain=taken_per_domain,
             )
-
             if len(batch) < self.effective_batch_size and self.drop_last:
                 break
-
             if len(batch) > 0:
                 yield batch
-
             remaining -= min(self.effective_batch_size, remaining)
             batch_id += 1
+
+
 
     def __len__(self) -> int:
         n = len(self.dataset)

@@ -19,7 +19,7 @@ from src.models.prototype.proto_ops import (
     negative_sq_logits,
     empirical_prototypes,
 )
-from src.samplers.meta_split import DomainMetaSplitConfig, DomainMetaSplitter
+from src.samplers.asym_meta_split import AsymMetaSplitConfig, AsymMetaSplitter
 
 
 
@@ -68,6 +68,10 @@ class MCPDGConfig(BaseDGConfig):
     meta_test_domains: int = 1
     meta_randomize: bool = True
     meta_split_seed: int = 42
+
+    asym_meta: bool = True
+    meta_debug: bool = False
+
 
 
 # =========================================================
@@ -118,13 +122,9 @@ class MCPDGClassifier(BaseDGClassifier):
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
 
-        self.meta_splitter = DomainMetaSplitter(
-            DomainMetaSplitConfig(
-                meta_test_domains=cfg.meta_test_domains,
-                randomize=cfg.meta_randomize,
-                seed=cfg.meta_split_seed,
-                debug=getattr(cfg, "meta_debug", False),
-                debug_max_steps=getattr(cfg, "meta_debug_max_steps", 20),
+        self.meta_splitter = AsymMetaSplitter(
+            AsymMetaSplitConfig(
+                debug=bool(cfg.meta_debug),
             )
         )
 

@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Sampler builders for normal DG and source-only meta-learning."""
 from __future__ import annotations
+
 from typing import Any, Dict, Optional
+
 from torch.utils.data import BatchSampler, Dataset
+
 from .domain_batch_sampler import MetaDomainBatchSampler
+from .asym_episode_sampler import AsymEpisodeBatchSampler
 
 
 def build_train_batch_sampler(
@@ -13,27 +16,37 @@ def build_train_batch_sampler(
     seed: int = 42
 ) -> BatchSampler | None:
     sampler_cfg = sampler_cfg or {}
-    enabled = bool(sampler_cfg.get('enabled', False))
-    if not enabled:
+    if not bool(sampler_cfg.get("enabled", False)):
         return None
 
-    name = str(sampler_cfg.get('name', 'meta_domain_batch_sampler')).lower()
-    if name != 'meta_domain_batch_sampler':
-        raise ValueError(f'Unsupported sampler name: {name}')
+    name = str(sampler_cfg.get("name", "meta_domain_batch_sampler")).lower()
 
-    return MetaDomainBatchSampler(
-        dataset=dataset,
-        batch_size=batch_size,
-        domains_per_batch=int(sampler_cfg.get('domains_per_batch', 2)),
-        samples_per_domain=sampler_cfg.get('samples_per_domain', None),
-        shuffle=bool(sampler_cfg.get('shuffle', True)),
-        drop_last=bool(sampler_cfg.get('drop_last', False)),
-        seed=int(sampler_cfg.get('seed', seed)),
-        debug=bool(sampler_cfg.get('debug', False)),
-        debug_max_batches=int(sampler_cfg.get('debug_max_batches', 10)),
-        debug_print_indices=bool(sampler_cfg.get('debug_print_indices', False)),
-        class_aware=bool(sampler_cfg.get('class_aware', False)),
-        normal_label=int(sampler_cfg.get('normal_label', 0)),
-        min_per_fault_class=int(sampler_cfg.get('min_per_fault_class', 0)),
-        oversample_minority=bool(sampler_cfg.get('oversample_minority', True)),
-    )
+    if name == "meta_domain_batch_sampler":
+        return MetaDomainBatchSampler(
+            dataset=dataset,
+            batch_size=batch_size,
+            domains_per_batch=int(sampler_cfg.get("domains_per_batch", 2)),
+            samples_per_domain=sampler_cfg.get("samples_per_domain", None),
+            shuffle=bool(sampler_cfg.get("shuffle", True)),
+            drop_last=bool(sampler_cfg.get("drop_last", False)),
+            seed=int(sampler_cfg.get("seed", seed)),
+        )
+
+    if name == "asym_episode_sampler":
+        return AsymEpisodeBatchSampler(
+            dataset=dataset,
+            support_domains=int(sampler_cfg.get("support_domains", 2)),
+            support_samples_per_domain=int(sampler_cfg.get("support_samples_per_domain", 12)),
+            query_samples_per_domain=int(sampler_cfg.get("query_samples_per_domain", 8)),
+            support_fault_ratio=float(sampler_cfg.get("support_fault_ratio", 0.33)),
+            query_min_fault=int(sampler_cfg.get("query_min_fault", 1)),
+            query_temp=float(sampler_cfg.get("query_temp", 0.9)),
+            normal_label=int(sampler_cfg.get("normal_label", 0)),
+            shuffle=bool(sampler_cfg.get("shuffle", True)),
+            drop_last=bool(sampler_cfg.get("drop_last", False)),
+            seed=int(sampler_cfg.get("seed", seed)),
+            debug=bool(sampler_cfg.get("debug", False)),
+            debug_max_batches=int(sampler_cfg.get("debug_max_batches", 10)),
+        )
+
+    raise ValueError(f"Unsupported sampler name: {name}")
