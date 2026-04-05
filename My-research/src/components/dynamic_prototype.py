@@ -7,10 +7,8 @@ import torch.nn.functional as F
 
 
 class DynamicPrototypeGenerator(nn.Module):
-    """
-    Residual dynamic prototype:
-        p_{k,d} = e_k + alpha * Delta(e_k, c_d)
-    """
+    # Residual dynamic prototype:
+    #     p_{k,d} = e_k + alpha * Delta(e_k, c_d)
     def __init__(self, feat_dim: int = 128, hidden_dim: int = 256, alpha: float = 0.2) -> None:
         super().__init__()
         self.alpha = float(alpha)
@@ -21,14 +19,9 @@ class DynamicPrototypeGenerator(nn.Module):
         )
 
     def forward(self, class_anchor: torch.Tensor, cond_emb: torch.Tensor) -> torch.Tensor:
-        """
-        class_anchor: [K, C]
-        cond_emb:     [D, C]
-        return:       [D, K, C]
-        """
-        d = cond_emb.size(0)
-        k = class_anchor.size(0)
-        c = class_anchor.size(1)
+        d = cond_emb.size(0) # class_anchor: [K, C]
+        k = class_anchor.size(0) # cond_emb:     [D, C]
+        c = class_anchor.size(1)# return:       [D, K, C]
 
         anchor_expand = class_anchor.unsqueeze(0).expand(d, k, c)
         cond_expand = cond_emb.unsqueeze(1).expand(d, k, c)

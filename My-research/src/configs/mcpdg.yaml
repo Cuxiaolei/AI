@@ -53,7 +53,7 @@ model:
 
   # =========================
   # 模型功能开关
-  # use_linear_head: 普通线性分类头，提供稳定判别基线
+  # use_linear_head: 普通线性分类头，提供稳定判别基线，需要与proto同时开启
   # use_dynamic_proto: 启用工况条件动态原型
   # use_proto_cls: 启用原型分类分支
   # use_align_loss: 启用原型对齐损失

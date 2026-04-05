@@ -2,43 +2,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import BaseDGClassifier, BaseDGConfig
-from src.losses.prototype_losses import (
-    masked_proto_align_loss,
-    sample_prototype_contrastive_loss,
-)
-from src.models.components.condition_encoder import ConditionEncoder
-from src.models.components.dynamic_prototype import DynamicPrototypeGenerator
-from src.models.prototype.proto_ops import (
-    negative_sq_logits,
-    empirical_prototypes,
-)
+from src.losses.loss_aggregator import compute_branch_loss
+from src.components.condition_encoder import ConditionEncoder
+from src.components.dynamic_prototype import DynamicPrototypeGenerator
+from src.prototype.proto_ops import negative_sq_logits
 from src.samplers.asym_meta_split import AsymMetaSplitConfig, AsymMetaSplitter
 
 
-
-
-def _inverse_frequency_weights(
-    labels: torch.Tensor,
-    num_classes: int,
-    power: float = 0.5,
-) -> torch.Tensor:
-    counts = torch.bincount(labels, minlength=num_classes).float()
-    counts = torch.clamp(counts, min=1.0)
-    weights = 1.0 / (counts ** power)
-    weights = weights / weights.mean()
-    return weights
-
-
-# =========================================================
-# config
-# =========================================================
 @dataclass
 class MCPDGConfig(BaseDGConfig):
     # condition / prototype dims
@@ -72,28 +49,11 @@ class MCPDGConfig(BaseDGConfig):
     asym_meta: bool = True
     meta_debug: bool = False
 
-
-
-# =========================================================
-# model
-# =========================================================
 class MCPDGClassifier(BaseDGClassifier):
-    """
-    Debug / ablation version of MCPDG.
-
-    Goals:
-    - keep current project unchanged as much as possible
-    - switch behaviors by config only
-    - support freq / tf / both through BaseDGClassifier
-    """
-
     def __init__(self, cfg: MCPDGConfig) -> None:
         super().__init__(cfg)
         self.cfg = cfg
         self.num_classes = int(cfg.num_classes)
-
-        if (not cfg.use_linear_head) and (not cfg.use_proto_cls):
-            raise ValueError("At least one of use_linear_head or use_proto_cls must be True.")
 
         self.class_embed = nn.Embedding(self.num_classes, self.feat_dim)
         self.cond_encoder = ConditionEncoder(
@@ -127,22 +87,15 @@ class MCPDGClassifier(BaseDGClassifier):
                 debug=bool(cfg.meta_debug),
             )
         )
-
-        # filled by main.py through set_condition_lookup()
         self.register_buffer("condition_table", torch.zeros(1, int(cfg.cond_dim)), persistent=False)
 
-    # -----------------------------------------------------
     # external hook for main.py
-    # -----------------------------------------------------
     def set_condition_lookup(self, condition_table) -> None:
-        """
-        Accept:
-            1) torch.Tensor [num_domains, cond_dim]
-            2) dict[int, list/tuple/tensor]
-        """
+        # Accept:
+        #     1) torch.Tensor [num_domains, cond_dim]
+        #     2) dict[int, list/tuple/tensor]
         if torch.is_tensor(condition_table):
-            if condition_table.dim() != 2:
-                raise ValueError("condition_table tensor must be [num_domains, cond_dim]")
+            if condition_table.dim() != 2: raise ValueError("condition_table tensor must be [num_domains, cond_dim]")
             self.condition_table = condition_table.float()
             return
 
@@ -153,7 +106,6 @@ class MCPDGClassifier(BaseDGClassifier):
                 table[int(domain_id)] = torch.as_tensor(cond_vec, dtype=torch.float32)
             self.condition_table = table
             return
-
         raise TypeError("condition_table must be torch.Tensor or dict")
 
     def _lookup_condition(self, domains: torch.Tensor) -> torch.Tensor:
@@ -166,9 +118,7 @@ class MCPDGClassifier(BaseDGClassifier):
     # prototype branch
     # -----------------------------------------------------
     def _build_proto_bank(self, unique_domains: torch.Tensor, device: torch.device) -> torch.Tensor:
-        """
-        return: [D, K, C]
-        """
+        # return: [D, K, C]
         class_anchor = F.normalize(self.class_embed.weight, dim=-1)
 
         if self.use_dynamic_proto:
@@ -229,74 +179,27 @@ class MCPDGClassifier(BaseDGClassifier):
         }
         return out
 
-    # -----------------------------------------------------
-    # losses
-    # -----------------------------------------------------
     def _compute_branch_objective(
-        self,
-        out: Dict[str, torch.Tensor],
-        criterion,
+            self,
+            out: Dict[str, torch.Tensor],
+            criterion,
     ) -> Dict[str, torch.Tensor]:
-        feature = out["feature"]
-        y = out["y"]
-        domains = out["domain"]
-        unique_domains = out["unique_domains"]
-        proto_bank = out["proto_bank"]
-        logits_linear = out["logits_linear"]
-        logits_proto = out["logits_proto"]
+        return compute_branch_loss(
+            out=out,
+            criterion=criterion,
+            use_linear_head=self.use_linear_head,
+            use_proto_cls=self.use_proto_cls,
+            proto_cls_weight=self.proto_cls_weight,
+            use_align_loss=self.use_align_loss,
+            align_weight=self.align_weight,
+            use_pcl_loss=self.use_pcl_loss,
+            pcl_weight=self.pcl_weight,
+            pcl_temperature=self.pcl_temperature,
+            imbalance_power=self.imbalance_power,
+            num_classes=self.num_classes,
+        )
 
-        zero = feature.new_tensor(0.0)
 
-        # classification losses
-        loss_cls_linear = criterion(logits_linear, y) if (self.use_linear_head and logits_linear is not None) else zero
-        loss_cls_proto = criterion(logits_proto, y) if (self.use_proto_cls and logits_proto is not None) else zero
-
-        if self.use_linear_head and self.use_proto_cls:
-            loss_cls = loss_cls_linear + self.proto_cls_weight * loss_cls_proto
-        elif self.use_linear_head:
-            loss_cls = loss_cls_linear
-        else:
-            loss_cls = loss_cls_proto
-
-        # align loss
-        if self.use_align_loss and self.use_proto_cls:
-            proto_emp, valid_mask = empirical_prototypes(
-                feat=feature,
-                labels=y,
-                domains=domains,
-                unique_domains=unique_domains,
-                num_classes=self.num_classes,
-            )
-            loss_align = masked_proto_align_loss(proto_bank, proto_emp, valid_mask)
-        else:
-            loss_align = zero
-
-        # prototype contrastive loss
-        if self.use_pcl_loss and self.use_proto_cls:
-            loss_pcl = sample_prototype_contrastive_loss(
-                feat=feature,
-                labels=y,
-                proto_bank=proto_bank,
-                temperature=self.pcl_temperature,
-                imbalance_power=self.imbalance_power,
-            )
-        else:
-            loss_pcl = zero
-
-        total_loss = loss_cls + self.align_weight * loss_align + self.pcl_weight * loss_pcl
-
-        return {
-            "loss": total_loss,
-            "loss_cls": loss_cls.detach(),
-            "loss_cls_linear": loss_cls_linear.detach(),
-            "loss_cls_proto": loss_cls_proto.detach(),
-            "loss_align": loss_align.detach(),
-            "loss_pcl": loss_pcl.detach(),
-        }
-
-    # -----------------------------------------------------
-    # standard inference for test
-    # -----------------------------------------------------
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         out = self._forward_branch(batch)
         return {
@@ -304,9 +207,6 @@ class MCPDGClassifier(BaseDGClassifier):
             "feature": out["feature"],
         }
 
-    # -----------------------------------------------------
-    # training entry for current Trainer
-    # -----------------------------------------------------
     def compute_loss(
         self,
         batch: Dict[str, torch.Tensor],
