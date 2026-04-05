@@ -95,7 +95,6 @@ def build_method(cfg: dict):
             use_proto_cls=bool(model_cfg.get('use_proto_cls', True)),
             use_align_loss=bool(model_cfg.get('use_align_loss', True)),
             use_pcl_loss=bool(model_cfg.get('use_pcl_loss', True)),
-            use_meta_loss=bool(model_cfg.get('use_meta_loss', True)),
 
             proto_residual_alpha=float(model_cfg.get('proto_residual_alpha', 0.2)),
             proto_cls_weight=float(model_cfg.get('proto_cls_weight', 0.5)),
@@ -103,12 +102,7 @@ def build_method(cfg: dict):
             align_weight=float(model_cfg.get('align_weight', 1.0)),
             pcl_weight=float(model_cfg.get('pcl_weight', 0.1)),
             pcl_temperature=float(model_cfg.get('pcl_temperature', 0.1)),
-            meta_test_weight=float(model_cfg.get('meta_test_weight', 1.0)),
             imbalance_power=float(model_cfg.get('imbalance_power', 0.5)),
-
-            meta_test_domains=int(model_cfg.get('meta_test_domains', 1)),
-            meta_randomize=bool(model_cfg.get('meta_randomize', True)),
-            meta_split_seed=int(model_cfg.get('meta_split_seed', 42)),
         ))
 
     raise ValueError(f'Unsupported method: {method_name}')
