@@ -13,6 +13,7 @@ from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
 from src.prototype.proto_ops import negative_sq_logits
+from src.samplers.asym_meta_split import AsymMetaSplitConfig, AsymMetaSplitter
 
 
 @dataclass
@@ -28,6 +29,7 @@ class MCPDGConfig(BaseDGConfig):
     use_proto_cls: bool = True
     use_align_loss: bool = True
     use_pcl_loss: bool = False
+    use_meta_loss: bool = True
 
     # weights
     proto_residual_alpha: float = 0.2
@@ -36,7 +38,16 @@ class MCPDGConfig(BaseDGConfig):
     align_weight: float = 1.0
     pcl_weight: float = 0.1
     pcl_temperature: float = 0.1
+    meta_test_weight: float = 1.0
     imbalance_power: float = 0.5
+
+    # meta split
+    meta_test_domains: int = 1
+    meta_randomize: bool = True
+    meta_split_seed: int = 42
+
+    asym_meta: bool = True
+    meta_debug: bool = False
 
 class MCPDGClassifier(BaseDGClassifier):
     def __init__(self, cfg: MCPDGConfig) -> None:
@@ -61,14 +72,21 @@ class MCPDGClassifier(BaseDGClassifier):
         self.use_proto_cls = bool(cfg.use_proto_cls)
         self.use_align_loss = bool(cfg.use_align_loss)
         self.use_pcl_loss = bool(cfg.use_pcl_loss)
+        self.use_meta_loss = bool(cfg.use_meta_loss)
 
         self.proto_cls_weight = float(cfg.proto_cls_weight)
         self.eval_proto_weight = float(cfg.eval_proto_weight)
         self.align_weight = float(cfg.align_weight)
         self.pcl_weight = float(cfg.pcl_weight)
         self.pcl_temperature = float(cfg.pcl_temperature)
+        self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
 
+        self.meta_splitter = AsymMetaSplitter(
+            AsymMetaSplitConfig(
+                debug=bool(cfg.meta_debug),
+            )
+        )
         self.register_buffer("condition_table", torch.zeros(1, int(cfg.cond_dim)), persistent=False)
 
     # external hook for main.py
@@ -95,6 +113,7 @@ class MCPDGClassifier(BaseDGClassifier):
         if max_id >= self.condition_table.size(0):
             raise RuntimeError("Condition lookup table is missing or incomplete.")
         return self.condition_table[domains]
+
 
     def _build_proto_bank(self, unique_domains: torch.Tensor, device: torch.device) -> torch.Tensor:
         # return: [D, K, C]
@@ -184,23 +203,66 @@ class MCPDGClassifier(BaseDGClassifier):
         }
 
     def compute_loss(
-            self,
-            batch: Dict[str, torch.Tensor],
-            criterion,
-            epoch: int = 0,
-            global_step: int = 0,
+        self,
+        batch: Dict[str, torch.Tensor],
+        criterion,
+        epoch: int = 0,
+        global_step: int = 0,
     ) -> Dict[str, torch.Tensor]:
-
         full_out = self._forward_branch(batch)
-        stat = self._compute_branch_objective(full_out, criterion)
+
+        # no meta split
+        if not self.use_meta_loss:
+            stat = self._compute_branch_objective(full_out, criterion)
+            return {
+                "logits": full_out["logits"],
+                "feature": full_out["feature"],
+                "loss": stat["loss"],
+                "loss_cls": stat["loss_cls"],
+                "loss_cls_linear": stat["loss_cls_linear"],
+                "loss_cls_proto": stat["loss_cls_proto"],
+                "loss_align": stat["loss_align"],
+                "loss_pcl": stat["loss_pcl"],
+            }
+
+        split = self.meta_splitter.split(batch, step=global_step)
+        if split is None:
+            stat = self._compute_branch_objective(full_out, criterion)
+            return {
+                "logits": full_out["logits"],
+                "feature": full_out["feature"],
+                "loss": stat["loss"],
+                "loss_cls": stat["loss_cls"],
+                "loss_cls_linear": stat["loss_cls_linear"],
+                "loss_cls_proto": stat["loss_cls_proto"],
+                "loss_align": stat["loss_align"],
+                "loss_pcl": stat["loss_pcl"],
+            }
+
+        meta_train_batch, meta_test_batch, _, _ = split
+
+        train_out = self._forward_branch(meta_train_batch)
+        test_out = self._forward_branch(meta_test_batch)
+
+        train_stat = self._compute_branch_objective(train_out, criterion)
+        test_stat = self._compute_branch_objective(test_out, criterion)
+
+        total_loss = train_stat["loss"] + self.meta_test_weight * test_stat["loss"]
 
         return {
             "logits": full_out["logits"],
             "feature": full_out["feature"],
-            "loss": stat["loss"],
-            "loss_cls": stat["loss_cls"],
-            "loss_cls_linear": stat["loss_cls_linear"],
-            "loss_cls_proto": stat["loss_cls_proto"],
-            "loss_align": stat["loss_align"],
-            "loss_pcl": stat["loss_pcl"],
+            "loss": total_loss,
+
+            "loss_cls_train": train_stat["loss_cls"],
+            "loss_cls_linear_train": train_stat["loss_cls_linear"],
+            "loss_cls_proto_train": train_stat["loss_cls_proto"],
+            "loss_align_train": train_stat["loss_align"],
+            "loss_pcl_train": train_stat["loss_pcl"],
+
+            "loss_cls_meta": test_stat["loss_cls"],
+            "loss_cls_linear_meta": test_stat["loss_cls_linear"],
+            "loss_cls_proto_meta": test_stat["loss_cls_proto"],
+            "loss_align_meta": test_stat["loss_align"],
+            "loss_pcl_meta": test_stat["loss_pcl"],
         }

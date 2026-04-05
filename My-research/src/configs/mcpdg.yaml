@@ -8,6 +8,35 @@ data:
 method:
   name: mcpdg
 
+
+sampler:
+  enabled: false
+  name: meta_domain_batch_sampler
+  domains_per_batch: 3
+  samples_per_domain: null
+
+  # 3 个源域时：2 个 support 域，1 个 query 域
+  support_domains: 2
+
+  # support 比 query 大，方便模型里自动切分
+  support_samples_per_domain: 12
+  query_samples_per_domain: 8
+
+  # support：轻量增强故障类
+  support_fault_ratio: 0.33
+
+  # query：仅极轻故障保底 + 接近自然长尾
+  query_min_fault: 1
+  query_temp: 0.9
+
+  normal_label: 0
+  shuffle: true
+  drop_last: false
+  seed: 42
+
+  debug: true
+  debug_max_batches: 20
+
 model:
   feature_mode: freq
   freq_backbone_name: resnet1d18
