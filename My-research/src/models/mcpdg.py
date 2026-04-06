@@ -18,7 +18,6 @@ from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter, DomainM
 
 @dataclass
 class MCPDGConfig(BaseDGConfig):
-    # condition / prototype dims
     cond_dim: int = 3
     cond_hidden_dim: int = 64
     proto_hidden_dim: int = 256
@@ -95,8 +94,8 @@ class MCPDGClassifier(BaseDGClassifier):
 
         self.meta_splitter = DomainMetaSplitter(
             DomainMetaSplitConfig(
-                meta_test_domains=self.meta_test_domains,
-                randomize=self.meta_randomize,
+                meta_test_domains=cfg.meta_test_domains,
+                randomize=cfg.meta_randomize,
                 seed=cfg.meta_split_seed,
                 debug=bool(cfg.meta_debug),
                 debug_max_steps=int(cfg.meta_debug_max_steps),

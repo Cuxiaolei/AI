@@ -104,7 +104,7 @@ def build_method(cfg: dict):
             imbalance_power=float(model_cfg.get('imbalance_power', 0.5)),
 
             # meta split
-            meta_test_domains=int(model_cfg.get('meta_test_domains')),
+            meta_test_domains=int(model_cfg.get('meta_test_domains', 1)),
             meta_randomize=bool(model_cfg.get('meta_randomize', True)),
             meta_split_seed=int(model_cfg.get('meta_split_seed', 42)),
             meta_debug=bool(model_cfg.get('meta_debug', False)),
