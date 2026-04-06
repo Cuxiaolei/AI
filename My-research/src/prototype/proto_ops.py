@@ -39,3 +39,56 @@ def empirical_prototypes(
                 proto_emp[i, k] = feat[mask].mean(dim=0)
                 valid_mask[i, k] = True
     return proto_emp, valid_mask
+
+
+
+
+
+
+# 元学习与原型学习融合
+def global_empirical_prototypes(
+    feat: torch.Tensor,
+    labels: torch.Tensor,
+    num_classes: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    c = feat.size(-1)
+    proto_emp = feat.new_zeros(num_classes, c)
+    valid_mask = torch.zeros(num_classes, dtype=torch.bool, device=feat.device)
+
+    for k in range(num_classes):
+        mask = (labels == k)
+        if mask.any():
+            proto_emp[k] = feat[mask].mean(dim=0)
+            proto_emp[k] = torch.nn.functional.normalize(proto_emp[k], dim=-1)
+            valid_mask[k] = True
+
+    return proto_emp, valid_mask
+
+def fuse_proto_bank(
+    proto_dyn: torch.Tensor,
+    proto_emp: torch.Tensor,
+    valid_mask: torch.Tensor,
+    beta: float = 0.5,
+) -> torch.Tensor:
+    emp_expand = proto_emp.unsqueeze(0).expand(proto_dyn.size(0), -1, -1)
+    valid_expand = valid_mask.view(1, -1, 1).expand_as(emp_expand)
+
+    mixed = (1.0 - beta) * proto_dyn + beta * emp_expand
+    proto_fused = torch.where(valid_expand, mixed, proto_dyn)
+    proto_fused = torch.nn.functional.normalize(proto_fused, dim=-1)
+    return proto_fused
+
+def negative_sq_logits_by_domain(
+    feat: torch.Tensor,
+    proto_bank: torch.Tensor,
+    sample_domains: torch.Tensor,
+    proto_domains: torch.Tensor,
+) -> torch.Tensor:
+    local_index = torch.full_like(sample_domains, fill_value=-1)
+
+    for i, d in enumerate(proto_domains.tolist()):
+        local_index[sample_domains == int(d)] = i
+
+    sample_proto = proto_bank[local_index]
+    logits = -((feat.unsqueeze(1) - sample_proto) ** 2).sum(dim=-1)
+    return logits

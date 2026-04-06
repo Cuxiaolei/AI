@@ -12,9 +12,9 @@ from .base import BaseDGClassifier, BaseDGConfig
 from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
-from src.prototype.proto_ops import negative_sq_logits
+from src.prototype.proto_ops import negative_sq_logits, global_empirical_prototypes, fuse_proto_bank, negative_sq_logits_by_domain
 from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter
-
+from src.losses.prototype_losses import masked_proto_align_loss, sample_prototype_contrastive_loss
 
 @dataclass
 class MCPDGConfig(BaseDGConfig):
@@ -47,6 +47,11 @@ class MCPDGConfig(BaseDGConfig):
     meta_train_per_class: int = 2
     meta_test_per_class: int = 2
     meta_random_query_domain: bool = True
+
+    episode_support_beta: float = 0.5
+    support_per_class: int = 1
+    query_train_per_class: int = 1
+    meta_query_per_class: int = 2
 
 class MCPDGClassifier(BaseDGClassifier):
     def __init__(self, cfg: MCPDGConfig) -> None:
@@ -96,6 +101,7 @@ class MCPDGClassifier(BaseDGClassifier):
                 debug_max_steps=int(cfg.meta_debug_max_steps),
             )
         )
+        self.episode_support_beta = float(cfg.episode_support_beta)
         # self.meta_splitter = AsymMetaSplitter(
         #     AsymMetaSplitConfig(
         #         debug=bool(cfg.meta_debug),
@@ -215,6 +221,7 @@ class MCPDGClassifier(BaseDGClassifier):
             "feature": out["feature"],
         }
 
+    # 正常对一个batch进行元训练域和元测试域进行分割
     def compute_loss(self, batch: Dict[str, torch.Tensor], criterion, epoch: int = 0, global_step: int = 0) -> Dict[str, torch.Tensor]:
         full_out = self._forward_branch(batch)
 
@@ -262,3 +269,128 @@ class MCPDGClassifier(BaseDGClassifier):
             "loss_align_meta": test_stat["loss_align"],
             "loss_pcl_meta": test_stat["loss_pcl"],
         }
+
+    # 给 query_train / query_meta 统一算 logits。
+    def _compute_episode_logits(
+            self,
+            feat: torch.Tensor,
+            sample_domains: torch.Tensor,
+            proto_bank: torch.Tensor,
+            proto_domains: torch.Tensor,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        logits_linear = self.forward_logits(feat) if self.use_linear_head else None
+        logits_proto = negative_sq_logits_by_domain(
+            feat=feat,
+            proto_bank=proto_bank,
+            sample_domains=sample_domains,
+            proto_domains=proto_domains,
+        ) if self.use_proto_cls else None
+
+        logits = self._combine_logits(logits_linear, logits_proto)
+        return logits, logits_linear, logits_proto
+
+    # 从一个 batch 只提归一化特征，不走完整 _forward_branch()。
+    def _extract_normalized_feature(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        feat_out = self.extract_features(batch)
+        feature = F.normalize(feat_out["feature"], dim=-1)
+        return feature
+
+    # 元学习与原型结合
+    def compute_episode_loss(
+            self,
+            episode: Dict[str, Dict[str, torch.Tensor]],
+            criterion,
+            epoch: int = 0,
+            global_step: int = 0,
+    ) -> Dict[str, torch.Tensor]:
+        support = episode["support"]
+        query_train = episode["query_train"]
+        query_meta = episode["query_meta"]
+
+        support_feat = self._extract_normalized_feature(support)
+        qtr_feat = self._extract_normalized_feature(query_train)
+        qmeta_feat = self._extract_normalized_feature(query_meta)
+
+        # 1. support 经验原型
+        proto_emp, valid_mask = global_empirical_prototypes(
+            feat=support_feat,
+            labels=support["y"],
+            num_classes=self.num_classes,
+        )
+
+        # 2. 训练域 / held-out 域动态原型
+        train_domains = torch.unique(query_train["domain"], sorted=True)
+        meta_domains = torch.unique(query_meta["domain"], sorted=True)
+
+        proto_dyn_train = self._build_proto_bank(train_domains, device=qtr_feat.device)
+        proto_dyn_meta = self._build_proto_bank(meta_domains, device=qmeta_feat.device)
+
+        # 3. 动态原型 + support 原型融合
+        proto_fused_train = fuse_proto_bank(
+            proto_dyn=proto_dyn_train,
+            proto_emp=proto_emp,
+            valid_mask=valid_mask,
+            beta=self.episode_support_beta,
+        )
+        proto_fused_meta = fuse_proto_bank(
+            proto_dyn=proto_dyn_meta,
+            proto_emp=proto_emp,
+            valid_mask=valid_mask,
+            beta=self.episode_support_beta,
+        )
+
+        # 4. query_train / query_meta 分类
+        logits_train, logits_linear_train, logits_proto_train = self._compute_episode_logits(
+            feat=qtr_feat,
+            sample_domains=query_train["domain"],
+            proto_bank=proto_fused_train,
+            proto_domains=train_domains,
+        )
+        logits_meta, logits_linear_meta, logits_proto_meta = self._compute_episode_logits(
+            feat=qmeta_feat,
+            sample_domains=query_meta["domain"],
+            proto_bank=proto_fused_meta,
+            proto_domains=meta_domains,
+        )
+
+        loss_cls_train = criterion(logits_train, query_train["y"])
+        loss_cls_meta = criterion(logits_meta, query_meta["y"])
+
+        loss_align = qtr_feat.new_tensor(0.0)
+        if self.use_align_loss:
+            proto_emp_expand = proto_emp.unsqueeze(0).expand(proto_fused_train.size(0), -1, -1)
+            valid_expand = valid_mask.unsqueeze(0).expand(proto_fused_train.size(0), -1)
+            loss_align = masked_proto_align_loss(
+                proto_fused_train,
+                proto_emp_expand,
+                valid_expand,
+            )
+
+        loss_pcl = qtr_feat.new_tensor(0.0)
+        if self.use_pcl_loss:
+            feat_all = torch.cat([qtr_feat, qmeta_feat], dim=0)
+            y_all = torch.cat([query_train["y"], query_meta["y"]], dim=0)
+            proto_all = torch.cat([proto_fused_train, proto_fused_meta], dim=0)
+            loss_pcl = sample_prototype_contrastive_loss(
+                feat=feat_all,
+                labels=y_all,
+                proto_bank=proto_all,
+                temperature=self.pcl_temperature,
+                imbalance_power=self.imbalance_power,
+            )
+
+        loss = (
+                loss_cls_train
+                + self.meta_test_weight * loss_cls_meta
+                + self.align_weight * loss_align
+                + self.pcl_weight * loss_pcl
+        )
+
+        return {
+            "loss": loss,
+            "loss_cls": loss_cls_train.detach(),
+            "loss_cls_meta": loss_cls_meta.detach(),
+            "loss_align": loss_align.detach(),
+            "loss_pcl": loss_pcl.detach(),
+        }
+
