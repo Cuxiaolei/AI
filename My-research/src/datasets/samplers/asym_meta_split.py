@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, List, Any
+from typing import Dict, Optional, Tuple, List
 
 import torch
-from torch import Tensor
 
 
 @dataclass
@@ -20,6 +19,19 @@ class AsymMetaSplitConfig:
 
 
 class AsymMetaSplitter:
+    """
+    兼容当前 compute_loss() 的增强版 splitter
+
+    返回:
+        meta_train_batch, meta_test_batch, support_domains, query_domain
+
+    逻辑:
+        1. 从当前 batch 的多个域中选 1 个 query 域
+        2. 剩余域作为 support 域
+        3. support 域内部按类抽样，形成 meta_train_batch
+        4. query 域内部按类抽样，形成 meta_test_batch
+    """
+
     def __init__(self, cfg: AsymMetaSplitConfig) -> None:
         self.cfg = cfg
 
@@ -66,7 +78,7 @@ class AsymMetaSplitter:
         self,
         batch: Dict[str, torch.Tensor],
         step: int = 0,
-    ) -> Optional[Dict[str, Dict[str, torch.Tensor]]]:
+    ) -> Optional[Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], torch.Tensor, torch.Tensor]]:
         domains = batch.get("domain", None)
         y = batch.get("y", None)
 
@@ -121,43 +133,10 @@ class AsymMetaSplitter:
                 f"meta_test_size={int(meta_test_idx.numel())}"
             )
 
-        support_batch = self.subset_batch_by_indices(batch, meta_train_idx)
 
-        # 从 support_batch 里再切出 support / query_train
-        support_y = support_batch["y"]
-        support_domain = support_batch["domain"]
-        num_classes = int(torch.max(support_y).item()) + 1
-
-        support_idx_list = []
-        query_train_idx_list = []
-
-        for d in support_domains.detach().cpu().tolist():
-            for c in range(num_classes):
-                idx = ((support_domain == int(d)) & (support_y == c)).nonzero(as_tuple=False).flatten()
-                if idx.numel() == 0:
-                    continue
-                idx = idx[torch.randperm(idx.numel(), device=idx.device)]
-
-                n_sup = min(1, idx.numel())
-                n_qtr = min(1, max(idx.numel() - n_sup, 0))
-
-                if n_sup > 0:
-                    support_idx_list.append(idx[:n_sup])
-                if n_qtr > 0:
-                    query_train_idx_list.append(idx[n_sup:n_sup + n_qtr])
-
-        if len(support_idx_list) == 0 or len(query_train_idx_list) == 0:
-            return None
-
-        support_idx = torch.cat(support_idx_list, dim=0)
-        query_train_idx = torch.cat(query_train_idx_list, dim=0)
-
-        query_meta_batch = self.subset_batch_by_indices(batch, meta_test_idx)
-
-        return {
-            "support": self.subset_batch_by_indices(support_batch, support_idx),
-            "query_train": self.subset_batch_by_indices(support_batch, query_train_idx),
-            "query_meta": query_meta_batch,
-            "support_domains": support_domains,
-            "query_domain": query_domain.view(1),
-        }
+        return (
+            self.subset_batch_by_indices(batch, meta_train_idx),
+            self.subset_batch_by_indices(batch, meta_test_idx),
+            support_domains,
+            query_domain.view(1),
+        )
