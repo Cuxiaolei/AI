@@ -12,9 +12,8 @@ from .base import BaseDGClassifier, BaseDGConfig
 from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
-from src.prototype.proto_ops import negative_sq_logits, global_empirical_prototypes, fuse_proto_bank, negative_sq_logits_by_domain
+from src.prototype.proto_ops import negative_sq_logits
 from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter
-from src.losses.prototype_losses import masked_proto_align_loss, sample_prototype_contrastive_loss
 
 @dataclass
 class MCPDGConfig(BaseDGConfig):
