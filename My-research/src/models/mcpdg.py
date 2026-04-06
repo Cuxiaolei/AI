@@ -86,21 +86,21 @@ class MCPDGClassifier(BaseDGClassifier):
             alpha=float(cfg.proto_residual_alpha),
         )
 
-        # self.meta_splitter = AsymMetaSplitter(
-        #     AsymMetaSplitConfig(
-        #         debug=bool(cfg.meta_debug),
-        #     )
-        # )
-
-        self.meta_splitter = DomainMetaSplitter(
-            DomainMetaSplitConfig(
-                meta_test_domains=cfg.meta_test_domains,
-                randomize=cfg.meta_randomize,
-                seed=cfg.meta_split_seed,
+        self.meta_splitter = AsymMetaSplitter(
+            AsymMetaSplitConfig(
                 debug=bool(cfg.meta_debug),
-                debug_max_steps=int(cfg.meta_debug_max_steps),
             )
         )
+
+        # self.meta_splitter = DomainMetaSplitter(
+        #     DomainMetaSplitConfig(
+        #         meta_test_domains=cfg.meta_test_domains,
+        #         randomize=cfg.meta_randomize,
+        #         seed=cfg.meta_split_seed,
+        #         debug=bool(cfg.meta_debug),
+        #         debug_max_steps=int(cfg.meta_debug_max_steps),
+        #     )
+        # )
 
         self.register_buffer(
             "condition_table",
