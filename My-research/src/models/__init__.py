@@ -106,7 +106,7 @@ def build_method(cfg: dict):
             # meta split
             meta_test_domains=int(model_cfg.get('meta_test_domains')),
             meta_randomize=bool(model_cfg.get('meta_randomize', True)),
-            meta_split_seed=int(model_cfg.get('meta_split_seed'), 42),
+            meta_split_seed=int(model_cfg.get('meta_split_seed')),
             meta_debug=bool(model_cfg.get('meta_debug')),
             meta_debug_max_steps = int(model_cfg.get('meta_debug_max_steps'), 20),
         ))
