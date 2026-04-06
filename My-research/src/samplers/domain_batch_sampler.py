@@ -48,8 +48,6 @@ class MetaDomainBatchSampler(BatchSampler):
         self.debug_max_batches = int(debug_max_batches)
         self.debug_print_indices = bool(debug_print_indices)
 
-
-
         # 获取有几个域、每个域多少样本、每个类被多少个
         domains = list(map(int, dataset.get_all_domains().tolist()))
         self.sample_domains: List[int] = domains

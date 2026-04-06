@@ -18,7 +18,6 @@ class DomainMetaSplitConfig:
 
 
 class DomainMetaSplitter:
-    """Split a batch into meta-train and meta-test subsets by domain."""
 
     def __init__(self, cfg: DomainMetaSplitConfig) -> None:
         self.cfg = cfg

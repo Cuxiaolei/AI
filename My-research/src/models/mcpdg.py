@@ -174,11 +174,7 @@ class MCPDGClassifier(BaseDGClassifier):
         }
         return out
 
-    def _compute_branch_objective(
-            self,
-            out: Dict[str, torch.Tensor],
-            criterion,
-    ) -> Dict[str, torch.Tensor]:
+    def _compute_branch_objective(self, out: Dict[str, torch.Tensor], criterion) -> Dict[str, torch.Tensor]:
         return compute_branch_loss(
             out=out,
             criterion=criterion,
@@ -194,7 +190,6 @@ class MCPDGClassifier(BaseDGClassifier):
             num_classes=self.num_classes,
         )
 
-
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         out = self._forward_branch(batch)
         return {
@@ -202,16 +197,9 @@ class MCPDGClassifier(BaseDGClassifier):
             "feature": out["feature"],
         }
 
-    def compute_loss(
-        self,
-        batch: Dict[str, torch.Tensor],
-        criterion,
-        epoch: int = 0,
-        global_step: int = 0,
-    ) -> Dict[str, torch.Tensor]:
+    def compute_loss(self, batch: Dict[str, torch.Tensor], criterion, epoch: int = 0, global_step: int = 0) -> Dict[str, torch.Tensor]:
         full_out = self._forward_branch(batch)
 
-        # no meta split
         if not self.use_meta_loss:
             stat = self._compute_branch_objective(full_out, criterion)
             return {
@@ -227,17 +215,7 @@ class MCPDGClassifier(BaseDGClassifier):
 
         split = self.meta_splitter.split(batch, step=global_step)
         if split is None:
-            stat = self._compute_branch_objective(full_out, criterion)
-            return {
-                "logits": full_out["logits"],
-                "feature": full_out["feature"],
-                "loss": stat["loss"],
-                "loss_cls": stat["loss_cls"],
-                "loss_cls_linear": stat["loss_cls_linear"],
-                "loss_cls_proto": stat["loss_cls_proto"],
-                "loss_align": stat["loss_align"],
-                "loss_pcl": stat["loss_pcl"],
-            }
+            raise ValueError(f"训练终止：meta_splitter.split() 返回空值 None，step={global_step}")
 
         meta_train_batch, meta_test_batch, _, _ = split
 
@@ -254,11 +232,11 @@ class MCPDGClassifier(BaseDGClassifier):
             "feature": full_out["feature"],
             "loss": total_loss,
 
-            "loss_cls_train": train_stat["loss_cls"],
-            "loss_cls_linear_train": train_stat["loss_cls_linear"],
-            "loss_cls_proto_train": train_stat["loss_cls_proto"],
-            "loss_align_train": train_stat["loss_align"],
-            "loss_pcl_train": train_stat["loss_pcl"],
+            "loss_cls": train_stat["loss_cls"],
+            "loss_cls_linear": train_stat["loss_cls_linear"],
+            "loss_cls_proto": train_stat["loss_cls_proto"],
+            "loss_align": train_stat["loss_align"],
+            "loss_pcl": train_stat["loss_pcl"],
 
             "loss_cls_meta": test_stat["loss_cls"],
             "loss_cls_linear_meta": test_stat["loss_cls_linear"],

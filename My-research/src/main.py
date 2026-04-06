@@ -60,7 +60,6 @@ def main():
     )
 
     if batch_sampler is not None:
-        print("用到了元学习")
         train_loader = DataLoader(
             train_dataset,
             batch_sampler=batch_sampler,
@@ -69,7 +68,6 @@ def main():
             persistent_workers=(num_workers > 0),
         )
     else:
-        print("没有用到元学习")
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
