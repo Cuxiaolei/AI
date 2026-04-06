@@ -25,7 +25,7 @@ scheduler:
   min_lr: 1.0e-6
 
 loss:
-  name: local_loss
+  name: focal_loss
   use_class_weights: true  # 类别不平衡时建议开启
   gamma: 2.0
 
