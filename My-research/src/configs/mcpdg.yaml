@@ -10,7 +10,7 @@ method:
 
 
 sampler:
-  enabled: true
+  enabled: false
   domains_per_batch: 3
   samples_per_domain: null
 
