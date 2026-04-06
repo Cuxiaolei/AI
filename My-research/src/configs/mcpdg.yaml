@@ -85,16 +85,7 @@ model:
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
 
-  # =========================
-  # 源域内 meta split 参数
-  # meta_test_domains: 每个 batch 中划为 meta-test 的源域数量
-  # meta_randomize: 是否随机划分 meta-train / meta-test
-  # meta_split_seed: 划分随机种子
-  # =========================
-  meta_test_domains: 1
-  meta_randomize: true
   meta_split_seed: 42
-
   meta_debug: true
   meta_debug_max_steps: 20
 

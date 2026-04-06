@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+import gc
 
 import numpy as np
 import torch
@@ -9,7 +10,6 @@ from torch.utils.data import DataLoader
 
 from src.utils.confusion import build_label_names, export_confusion_matrix
 from src.utils.logger import ResultRecorder, build_logger
-
 
 def build_trainer_logger_and_recorder(output_dir: Path):
     """构建训练器的logger和结果记录器"""
@@ -96,3 +96,45 @@ def export_final_confusion_matrix(
         output_dir / 'confusion_matrices', 
         stem='confusion_matrix_last'
     )
+
+def close_dataset_if_possible(loader: Optional[DataLoader]) -> None:
+    """关闭数据集（如果数据集实现了close方法）"""
+    if loader is None:
+        return
+    ds = getattr(loader, 'dataset', None)
+    if ds is not None and hasattr(ds, 'close'):
+        try:
+            ds.close()
+        except Exception:
+            pass
+
+
+def shutdown_dataloader_workers(loader: Optional[DataLoader]) -> None:
+    """提前关闭DataLoader worker，减少卡顿"""
+    if loader is None:
+        return
+    try:
+        iterator = getattr(loader, '_iterator', None)
+        if iterator and hasattr(iterator, '_shutdown_workers'):
+            iterator._shutdown_workers()
+    except Exception:
+        pass
+
+
+def clean_up_dataloaders(train_loader: Optional[DataLoader], test_loader: Optional[DataLoader]) -> None:
+    """
+    完整清理 dataloader 资源
+    关闭 workers → 关闭数据集 → 清空内存 → 清空 CUDA 缓存
+    """
+    # 关闭 dataloader 子进程
+    shutdown_dataloader_workers(train_loader)
+    shutdown_dataloader_workers(test_loader)
+
+    # 关闭数据集
+    close_dataset_if_possible(train_loader)
+    close_dataset_if_possible(test_loader)
+
+    # 垃圾回收
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()

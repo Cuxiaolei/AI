@@ -13,7 +13,7 @@ from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
 from src.prototype.proto_ops import negative_sq_logits
-from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter, DomainMetaSplitter, DomainMetaSplitConfig
+from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter
 
 
 @dataclass
@@ -40,13 +40,13 @@ class MCPDGConfig(BaseDGConfig):
     meta_test_weight: float = 1.0
     imbalance_power: float = 0.5
 
-    # meta split
-    meta_test_domains: int = 1
-    meta_randomize: bool = True
     meta_split_seed: int = 42
-
     meta_debug: bool = False
     meta_debug_max_steps: int = 20
+
+    meta_train_per_class: int = 2
+    meta_test_per_class: int = 2
+    meta_random_query_domain: bool = True
 
 class MCPDGClassifier(BaseDGClassifier):
     def __init__(self, cfg: MCPDGConfig) -> None:
@@ -88,17 +88,17 @@ class MCPDGClassifier(BaseDGClassifier):
 
         self.meta_splitter = AsymMetaSplitter(
             AsymMetaSplitConfig(
+                train_per_class=int(cfg.meta_train_per_class),
+                test_per_class=int(cfg.meta_test_per_class),
+                random_query_domain=bool(cfg.meta_random_query_domain),
+                seed=int(cfg.meta_split_seed),
                 debug=bool(cfg.meta_debug),
+                debug_max_steps=int(cfg.meta_debug_max_steps),
             )
         )
-
-        # self.meta_splitter = DomainMetaSplitter(
-        #     DomainMetaSplitConfig(
-        #         meta_test_domains=cfg.meta_test_domains,
-        #         randomize=cfg.meta_randomize,
-        #         seed=cfg.meta_split_seed,
+        # self.meta_splitter = AsymMetaSplitter(
+        #     AsymMetaSplitConfig(
         #         debug=bool(cfg.meta_debug),
-        #         debug_max_steps=int(cfg.meta_debug_max_steps),
         #     )
         # )
 

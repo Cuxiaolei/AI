@@ -9,25 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-
-class FocalLoss(nn.Module):
-    def __init__(self, weight: Optional[torch.Tensor] = None, gamma: float = 2.0, reduction: str = 'mean') -> None:
-        super().__init__()
-        self.register_buffer('weight', weight if weight is not None else None)
-        self.gamma = float(gamma)
-        self.reduction = reduction
-
-    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce = F.cross_entropy(logits, targets, weight=self.weight, reduction='none')
-        pt = torch.exp(-ce)
-        loss = ((1 - pt) ** self.gamma) * ce
-        if self.reduction == 'mean':
-            return loss.mean()
-        if self.reduction == 'sum':
-            return loss.sum()
-        return loss
-
-
 @torch.no_grad()
 def compute_class_weights_from_loader(loader: DataLoader, num_classes: int) -> torch.Tensor:
     counts = torch.zeros(num_classes, dtype=torch.float64)
@@ -48,10 +29,7 @@ def build_classification_loss(cfg: dict, class_weights: Optional[torch.Tensor] =
     name = str(cfg.get('name', 'cross_entropy')).lower()
     if name in {'cross_entropy', 'ce'}:
         return nn.CrossEntropyLoss(weight=class_weights)
-    if name in {'focal_loss', 'focal'}:
-        gamma = float(cfg.get('gamma', 2.0))
-        return FocalLoss(weight=class_weights, gamma=gamma)
     raise ValueError(f'Unsupported loss: {name}')
 
 
-__all__ = ['FocalLoss', 'compute_class_weights_from_loader', 'build_classification_loss']
+__all__ = ['compute_class_weights_from_loader', 'build_classification_loss']

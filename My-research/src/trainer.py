@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-
+import gc
 import numpy as np
 import torch
-import gc
 from torch.utils.data import DataLoader
 
 from src.losses import build_classification_loss, compute_class_weights_from_loader
@@ -21,9 +20,9 @@ from src.utils.train_utils import (
     log_train_epoch,
     log_final_test,
     save_final_test_metrics,
-    export_final_confusion_matrix
+    export_final_confusion_matrix,
+    clean_up_dataloaders,
 )
-
 
 class Trainer:
     def __init__(
@@ -171,46 +170,11 @@ class Trainer:
 
         return metrics, cm
 
-    def _close_dataset_if_possible(self, loader: Optional[DataLoader]) -> None:
-        """关闭数据集（如果数据集实现了close方法）"""
-        if loader is None:
-            return
-        ds = getattr(loader, 'dataset', None)
-        if ds is not None and hasattr(ds, 'close'):
-            try:
-                ds.close()
-            except Exception:
-                pass
-
-    def _shutdown_dataloader_workers(self, loader: Optional[DataLoader]) -> None:
-        """提前关闭DataLoader worker，减少卡顿"""
-        if loader is None:
-            return
-        try:
-            iterator = getattr(loader, '_iterator', None)
-            if iterator and hasattr(iterator, '_shutdown_workers'):
-                iterator._shutdown_workers()
-        except Exception:
-            pass
-
     def close(self) -> None:
         """释放资源（关闭dataloader/数据集，清理显存）"""
-        # 关闭dataloader worker
-        self._shutdown_dataloader_workers(self.train_loader)
-        self._shutdown_dataloader_workers(self.test_loader)
-
-        # 关闭数据集
-        self._close_dataset_if_possible(self.train_loader)
-        self._close_dataset_if_possible(self.test_loader)
-
-        # 清空引用
+        clean_up_dataloaders(self.train_loader, self.test_loader)
         self.train_loader = None
         self.test_loader = None
-
-        # 垃圾回收 + 清空CUDA缓存
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
     def fit(self) -> List[Dict]:
         """主训练流程：遍历epochs训练，最终评估并保存结果"""
@@ -238,36 +202,19 @@ class Trainer:
 
             # 保存checkpoint（如果配置开启）
             if self.cfg.get('output', {}).get('save_checkpoint', False):
-                save_trainer_checkpoint(
-                    output_dir=self.output_dir,
-                    epoch=epoch,
-                    history=history,
-                    model=self.model,
-                    optimizer=self.optimizer,
-                    scheduler=self.scheduler,
-                    cfg=self.cfg
-                )
-
+                save_trainer_checkpoint(output_dir=self.output_dir, epoch=epoch, history=history, model=self.model, optimizer=self.optimizer, scheduler=self.scheduler,cfg=self.cfg)
             # 打印训练日志
             log_train_epoch(self.logger, epoch, epochs, train_metrics)
+
         # 最终测试
         final_metrics, cm = self.evaluate_final()
         # 记录最终测试结果
-        final_row = {
-            'phase': 'final_test',
-            'epoch': epochs,
-            **{f'test_{k}': v for k, v in final_metrics.items()},
-        }
+        final_row = {'phase': 'final_test', 'epoch': epochs, **{f'test_{k}': v for k, v in final_metrics.items()},}
         history.append(final_row)
         self.recorder.append(final_row)
         self.recorder.flush()
         # 导出混淆矩阵
-        export_final_confusion_matrix(
-            cm=cm,
-            test_loader=self.test_loader,
-            num_classes=int(self.cfg['data']['num_classes']),
-            output_dir=self.output_dir
-        )
+        export_final_confusion_matrix(cm=cm, test_loader=self.test_loader, num_classes=int(self.cfg['data']['num_classes']), output_dir=self.output_dir)
         # 打印最终测试日志
         log_final_test(self.logger, final_metrics)
         # 保存最终测试指标
