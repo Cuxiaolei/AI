@@ -221,10 +221,17 @@ class MCPDGClassifier(BaseDGClassifier):
             "feature": out["feature"],
         }
 
-    # 正常对一个batch进行元训练域和元测试域进行分割
-    def compute_loss(self, batch: Dict[str, torch.Tensor], criterion, epoch: int = 0, global_step: int = 0) -> Dict[str, torch.Tensor]:
+    def compute_loss(
+            self,
+            batch: Dict[str, torch.Tensor],
+            criterion,
+            epoch: int = 0,
+            global_step: int = 0,
+    ) -> Dict[str, torch.Tensor]:
+        # 先算完整 batch 的输出，专门给 trainer 统计 acc 用
         full_out = self._forward_branch(batch)
 
+        # 不开 meta 时，走原来的普通分支
         if not self.use_meta_loss:
             stat = self._compute_branch_objective(full_out, criterion)
             return {
@@ -238,36 +245,27 @@ class MCPDGClassifier(BaseDGClassifier):
                 "loss_pcl": stat["loss_pcl"],
             }
 
-        split = self.meta_splitter.split(batch, step=global_step)
-        if split is None:
-            raise ValueError(f"训练终止：meta_splitter.split() 返回空值 None，step={global_step}")
+        # 开 meta 时，先把 batch 切成 episode
+        episode = self.meta_splitter.split(batch, step=global_step)
+        if episode is None:
+            raise ValueError(f"meta_splitter.split() returned None at step={global_step}")
 
-        meta_train_batch, meta_test_batch, _, _ = split
+        ep_stat = self.compute_episode_loss(
+            episode=episode,
+            criterion=criterion,
+            epoch=epoch,
+            global_step=global_step,
+        )
 
-        train_out = self._forward_branch(meta_train_batch)
-        test_out = self._forward_branch(meta_test_batch)
-
-        train_stat = self._compute_branch_objective(train_out, criterion)
-        test_stat = self._compute_branch_objective(test_out, criterion)
-
-        total_loss = train_stat["loss"] + self.meta_test_weight * test_stat["loss"]
-
+        # 注意这里必须把 logits 返回给 trainer
         return {
             "logits": full_out["logits"],
             "feature": full_out["feature"],
-            "loss": total_loss,
-
-            "loss_cls": train_stat["loss_cls"],
-            "loss_cls_linear": train_stat["loss_cls_linear"],
-            "loss_cls_proto": train_stat["loss_cls_proto"],
-            "loss_align": train_stat["loss_align"],
-            "loss_pcl": train_stat["loss_pcl"],
-
-            "loss_cls_meta": test_stat["loss_cls"],
-            "loss_cls_linear_meta": test_stat["loss_cls_linear"],
-            "loss_cls_proto_meta": test_stat["loss_cls_proto"],
-            "loss_align_meta": test_stat["loss_align"],
-            "loss_pcl_meta": test_stat["loss_pcl"],
+            "loss": ep_stat["loss"],
+            "loss_cls": ep_stat["loss_cls"],
+            "loss_cls_meta": ep_stat["loss_cls_meta"],
+            "loss_align": ep_stat["loss_align"],
+            "loss_pcl": ep_stat["loss_pcl"],
         }
 
     # 给 query_train / query_meta 统一算 logits。
@@ -288,6 +286,8 @@ class MCPDGClassifier(BaseDGClassifier):
 
         logits = self._combine_logits(logits_linear, logits_proto)
         return logits, logits_linear, logits_proto
+
+
 
     # 从一个 batch 只提归一化特征，不走完整 _forward_branch()。
     def _extract_normalized_feature(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
