@@ -13,7 +13,7 @@ from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
 from src.prototype.proto_ops import negative_sq_logits
-from src.samplers.asym_meta_split import AsymMetaSplitConfig, AsymMetaSplitter
+from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter, DomainMetaSplitter, DomainMetaSplitConfig
 
 
 @dataclass
@@ -46,26 +46,14 @@ class MCPDGConfig(BaseDGConfig):
     meta_randomize: bool = True
     meta_split_seed: int = 42
 
-    asym_meta: bool = True
     meta_debug: bool = False
+    meta_debug_max_steps: int = 20
 
 class MCPDGClassifier(BaseDGClassifier):
     def __init__(self, cfg: MCPDGConfig) -> None:
         super().__init__(cfg)
         self.cfg = cfg
         self.num_classes = int(cfg.num_classes)
-
-        self.class_embed = nn.Embedding(self.num_classes, self.feat_dim)
-        self.cond_encoder = ConditionEncoder(
-            input_dim=int(cfg.cond_dim),
-            hidden_dim=int(cfg.cond_hidden_dim),
-            out_dim=self.feat_dim,
-        )
-        self.proto_generator = DynamicPrototypeGenerator(
-            feat_dim=self.feat_dim,
-            hidden_dim=int(cfg.proto_hidden_dim),
-            alpha=float(cfg.proto_residual_alpha),
-        )
 
         self.use_linear_head = bool(cfg.use_linear_head)
         self.use_dynamic_proto = bool(cfg.use_dynamic_proto)
@@ -82,13 +70,44 @@ class MCPDGClassifier(BaseDGClassifier):
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
 
-        self.meta_splitter = AsymMetaSplitter(
-            AsymMetaSplitConfig(
+        self.class_embed = nn.Embedding(
+            self.num_classes,
+            self.feat_dim
+        )
+
+        self.cond_encoder = ConditionEncoder(
+            input_dim=int(cfg.cond_dim),
+            hidden_dim=int(cfg.cond_hidden_dim),
+            out_dim=self.feat_dim,
+        )
+
+        self.proto_generator = DynamicPrototypeGenerator(
+            feat_dim=self.feat_dim,
+            hidden_dim=int(cfg.proto_hidden_dim),
+            alpha=float(cfg.proto_residual_alpha),
+        )
+
+        # self.meta_splitter = AsymMetaSplitter(
+        #     AsymMetaSplitConfig(
+        #         debug=bool(cfg.meta_debug),
+        #     )
+        # )
+
+        self.meta_splitter = DomainMetaSplitter(
+            DomainMetaSplitConfig(
+                meta_test_domains=self.meta_test_domains,
+                randomize=self.meta_randomize,
+                seed=cfg.meta_split_seed,
                 debug=bool(cfg.meta_debug),
+                debug_max_steps=int(cfg.meta_debug_max_steps),
             )
         )
-        self.register_buffer("condition_table", torch.zeros(1, int(cfg.cond_dim)), persistent=False)
 
+        self.register_buffer(
+            "condition_table",
+            torch.zeros(1, int(cfg.cond_dim)),
+            persistent=False
+        )
     # external hook for main.py
     def set_condition_lookup(self, condition_table) -> None:
         # Accept:

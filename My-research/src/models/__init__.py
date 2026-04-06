@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from ultralytics.utils.torch_utils import model_info
+
 from .base import BaseDGClassifier, BaseDGConfig
 from .erm import ERMClassifier, ERMConfig
 from .mixstyle import MixStyleClassifier, MixStyleConfig
@@ -103,6 +105,14 @@ def build_method(cfg: dict):
             pcl_weight=float(model_cfg.get('pcl_weight', 0.1)),
             pcl_temperature=float(model_cfg.get('pcl_temperature', 0.1)),
             imbalance_power=float(model_cfg.get('imbalance_power', 0.5)),
+
+            # meta split
+            meta_test_domains=int(model_cfg.get('meta_test_domains')),
+            meta_randomize=bool(model_cfg.get('meta_randomize', True)),
+            meta_split_seed=int(model_cfg.get('meta_split_seed'), 42),
+            meta_debug=bool(model_cfg.get('meta_debug')),
+            meta_debug_max_steps = int(model_cfg.get('meta_debug_max_steps'), 20),
+
         ))
 
     raise ValueError(f'Unsupported method: {method_name}')

@@ -35,12 +35,12 @@ evaluation:
 
 sampler:
   enabled: false
-  name: meta_domain_batch_sampler
-  domains_per_batch: 2
-  samples_per_domain: null
+  domains_per_batch: 3
+  per_class_per_domain: 2
   shuffle: true
-  drop_last: false
+  drop_last: true
   seed: 42
+
 
 output:
   root: outputs

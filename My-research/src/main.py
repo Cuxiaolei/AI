@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from src.datasets import build_dataset
 from src.models import build_method
-from src.samplers import build_train_batch_sampler
+from src.datasets.samplers import build_train_batch_sampler
 from src.trainer import Trainer
 from src.utils.condition_utils import build_condition_table_from_datasets
 from src.utils.config import dump_yaml, load_config
