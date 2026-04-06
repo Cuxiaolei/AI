@@ -4,8 +4,18 @@ def generate_model_file_paths():
     返回：str - 格式化后的路径列表字符串
     """
     # 1. 配置基础参数
-    models = ["darm", "dpjdg", "erm", "groupdro", "irm", "mixstyle", "mldg", "vrex", "mcpdg"]  # 7个模型
-    num_vals = ["1", "5", "10", "20"]  # 数值后缀
+    models = [
+                # "darm",
+    #           "dpjdg",
+    #           "erm",
+    #           "groupdro",
+    #           "irm",
+    #           "mixstyle",
+    #           "mldg",
+    #           "vrex",
+              "mcpdg"
+              ]  # 7个模型
+    num_vals = ["1", "5", "10"]  # 数值后缀
     datasets = [
         {"name": "phm", "t_list": ["T1", "T2", "T3", "T4"]},  # PHM数据集
         {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
@@ -22,8 +32,9 @@ def generate_model_file_paths():
             ds_paths = []
             for t_val in ds["t_list"]:
                 for num_val in num_vals:
-                    path = f'python -m src.main --configs src/configs/{model}/{model}_{ds["name"]}_{t_val}_{num_val}.yaml'
-                    ds_paths.append(path)
+                    for i in range(1,11):
+                        path = f'python -m src.main --configs src/configs/{model}/{model}_{ds["name"]}_{t_val}_{num_val}-{i}.yaml'
+                        ds_paths.append(path)
 
             # 将当前数据集的路径加入结果
             final_output.extend(ds_paths)

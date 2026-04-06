@@ -86,7 +86,7 @@ model:
   eval_proto_weight: 0.5
 
   meta_split_seed: 42
-  meta_debug: true
+  meta_debug: false
   meta_debug_max_steps: 20
 
 output:

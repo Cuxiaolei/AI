@@ -1,0 +1,11 @@
+
+BASE: ../mcpdg.yaml
+
+data:
+  train_h5: /root/data/pu/pu_T6_1/train.h5
+  test_h5: /root/data/pu/pu_T6_1/test.h5
+  dataset_name: pu
+  num_classes: 9
+
+output:
+  exp_name: mcpdg_pu_T6_1-7
