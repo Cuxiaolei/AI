@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from ultralytics.utils.torch_utils import model_info
-
 from .base import BaseDGClassifier, BaseDGConfig
 from .erm import ERMClassifier, ERMConfig
 from .mixstyle import MixStyleClassifier, MixStyleConfig
@@ -25,7 +23,6 @@ def _common_cfg(cfg: dict):
         classifier_dropout=float(model_cfg.get('classifier_dropout', 0.0)),
         backbone_kwargs=model_cfg.get('backbone_kwargs', {}),
     )
-
 
 def build_method(cfg: dict):
     method_name = str(cfg['method']['name']).lower()
@@ -112,11 +109,8 @@ def build_method(cfg: dict):
             meta_split_seed=int(model_cfg.get('meta_split_seed'), 42),
             meta_debug=bool(model_cfg.get('meta_debug')),
             meta_debug_max_steps = int(model_cfg.get('meta_debug_max_steps'), 20),
-
         ))
-
     raise ValueError(f'Unsupported method: {method_name}')
-
 
 __all__ = [
     'BaseDGClassifier', 'BaseDGConfig',
