@@ -43,11 +43,6 @@ class MCPDGConfig(BaseDGConfig):
     meta_debug: bool = False
     meta_debug_max_steps: int = 20
 
-    meta_train_per_class: int = 2
-    meta_test_per_class: int = 2
-    meta_random_query_domain: bool = True
-
-
 class MCPDGClassifier(BaseDGClassifier):
     def __init__(self, cfg: MCPDGConfig) -> None:
         super().__init__(cfg)
@@ -88,20 +83,9 @@ class MCPDGClassifier(BaseDGClassifier):
 
         self.meta_splitter = AsymMetaSplitter(
             AsymMetaSplitConfig(
-                train_per_class=int(cfg.meta_train_per_class),
-                test_per_class=int(cfg.meta_test_per_class),
-                random_query_domain=bool(cfg.meta_random_query_domain),
-                seed=int(cfg.meta_split_seed),
                 debug=bool(cfg.meta_debug),
-                debug_max_steps=int(cfg.meta_debug_max_steps),
             )
         )
-
-        # self.meta_splitter = AsymMetaSplitter(
-        #     AsymMetaSplitConfig(
-        #         debug=bool(cfg.meta_debug),
-        #     )
-        # )
 
         self.register_buffer(
             "condition_table",
