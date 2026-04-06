@@ -48,7 +48,7 @@ def build_classification_loss(cfg: dict, class_weights: Optional[torch.Tensor] =
     name = str(cfg.get('name', 'cross_entropy')).lower()
     if name in {'cross_entropy', 'ce'}:
         return nn.CrossEntropyLoss(weight=class_weights)
-    if name in {'focal', 'focalloss'}:
+    if name in {'focal_loss', 'focal'}:
         gamma = float(cfg.get('gamma', 2.0))
         return FocalLoss(weight=class_weights, gamma=gamma)
     raise ValueError(f'Unsupported loss: {name}')

@@ -74,7 +74,7 @@ def main():
             shuffle=True,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            drop_last=bool(cfg['data'].get('drop_last_train', False)),
+            drop_last=bool(cfg['data'].get('drop_last_train')),
             persistent_workers=(num_workers > 0),
         )
 
