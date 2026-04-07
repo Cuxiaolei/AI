@@ -6,14 +6,14 @@ def generate_model_file_paths():
     # 1. 配置基础参数
     models = [
                 # "darm",
-    #           "dpjdg",
+              "dpjdg",
     #           "erm",
     #           "groupdro",
     #           "irm",
     #           "mixstyle",
     #           "mldg",
     #           "vrex",
-              "mcpdg"
+    #           "mcpdg"
               ]  # 7个模型
     num_vals = ["1", "5", "10"]  # 数值后缀
     datasets = [

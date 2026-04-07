@@ -59,8 +59,6 @@ class DPJDGClassifier(BaseDGClassifier):
         aug = dict(batch)
         if 'x_freq' in aug and torch.is_tensor(aug['x_freq']):
             aug['x_freq'] = self._augment_tensor(aug['x_freq'])
-        if 'x_tf' in aug and torch.is_tensor(aug['x_tf']):
-            aug['x_tf'] = self._augment_tensor(aug['x_tf'])
         return aug
 
     @staticmethod
