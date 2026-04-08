@@ -20,15 +20,27 @@ from openpyxl.utils import get_column_letter
 ROOT_DIR = r"D:\user\Documents\ai\paper\1_process\outputs\result"
 OUTPUT_PARENT = r"D:\user\Documents\ai\paper\1_process\outputs\result\！handle"
 
-MODEL_LIST = ["darm", "groupdro", "erm", "mixstyle", "mldg", "vrex", "irm", "dpjdg", "mcpdg"]
+MODEL_LIST = ["erm", "mldg", "vrex", "dfdn", "darm", "sdagn", "dpjdg", "masfd", "mcpdg"]
 TARGET_DATASETS = ["phm", "pu"]
-TARGET_TASKS = {"phm": ["T1", "T2", "T3", "T4"], "pu": ["T5", "T6", "T7", "T8"]}
+TARGET_TASKS = {
+    "phm": ["T1", "T2", "T3", "T4"],
+    "pu": ["T5", "T6", "T7", "T8"]
+}
 TARGET_DATA_SIZES = ["1", "5", "10"]
 # 固定指标顺序（和显示名一一对应）
-METRIC_ORDER = ["acc", "precision_macro", "recall_macro", "f1_macro"]
+METRIC_ORDER = [
+    "acc",
+    "precision_macro",
+    "recall_macro",
+    "f1_macro"
+]
 METRIC_DISPLAY = ["Acc", "Pre", "Rec", "F1"]
 # 每组shot对应的起始行（严格固定）
-SHOT_START_ROW = {"1": 1, "5": 23, "10": 45}
+SHOT_START_ROW = {
+    "1": 1,
+    "5": 23,
+    "10": 45
+}
 
 # 高亮样式
 HIGHLIGHT_FILL = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")

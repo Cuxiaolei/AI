@@ -244,7 +244,3 @@ python -m src.main --configs src/configs/erm/erm_pu_T8_10-7.yaml
 python -m src.main --configs src/configs/erm/erm_pu_T8_10-8.yaml
 python -m src.main --configs src/configs/erm/erm_pu_T8_10-9.yaml
 python -m src.main --configs src/configs/erm/erm_pu_T8_10-10.yaml
-
-
-echo 关机
-shutdown -h now

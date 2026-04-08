@@ -5,16 +5,16 @@ def generate_model_file_paths():
     """
     # 1. 配置基础参数
     models = [
-                # "darm",
+              # "erm",
+              # "mldg",
+              # "vrex",
+              # "dfdn",
+              # "darm",
+              # "sdagn",
               # "dpjdg",
-              "erm",
-              "groupdro",
-    #           "irm",
-    #           "mixstyle",
-    #           "mldg",
-    #           "vrex",
-    #           "mcpdg"
-              ]  # 7个模型
+              "masfd",
+              # "mcpdg"
+    ]  # 7个模型
     num_vals = ["1", "5", "10"]  # 数值后缀
     datasets = [
         {"name": "phm", "t_list": ["T1", "T2", "T3", "T4"]},  # PHM数据集

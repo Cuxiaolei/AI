@@ -3,10 +3,7 @@ from __future__ import annotations
 
 from .base import BaseDGClassifier, BaseDGConfig
 from .erm import ERMClassifier, ERMConfig
-from .mixstyle import MixStyleClassifier, MixStyleConfig
-from .irm import IRMClassifier, IRMConfig
 from .vrex import VRExClassifier, VRExConfig
-from .groupdro import GroupDROClassifier, GroupDROConfig
 from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
 from .dpjdg import DPJDGClassifier, DPJDGConfig
@@ -31,30 +28,6 @@ def build_method(cfg: dict):
 
     if method_name == 'erm':
         return ERMClassifier(ERMConfig(**common))
-    if method_name == 'mixstyle':
-        return MixStyleClassifier(MixStyleConfig(
-            **common,
-            mix_p=float(model_cfg.get('mix_p', 0.5)),
-            mix_alpha=float(model_cfg.get('mix_alpha', 0.1)),
-            mix_layer=str(model_cfg.get('mix_layer', 'layer1')),
-        ))
-    if method_name == 'irm':
-        return IRMClassifier(IRMConfig(
-            **common,
-            irm_lambda=float(model_cfg.get('irm_lambda', 1.0)),
-            irm_penalty_anneal_iters=int(model_cfg.get('irm_penalty_anneal_iters', 0)),
-        ))
-    if method_name == 'vrex':
-        return VRExClassifier(VRExConfig(
-            **common,
-            vrex_lambda=float(model_cfg.get('vrex_lambda', 1.0)),
-            vrex_penalty_anneal_iters=int(model_cfg.get('vrex_penalty_anneal_iters', 0)),
-        ))
-    if method_name == 'groupdro':
-        return GroupDROClassifier(GroupDROConfig(
-            **common,
-            groupdro_eta=float(model_cfg.get('groupdro_eta', 0.01)),
-        ))
     if method_name == 'mldg':
         return MLDGClassifier(MLDGConfig(
             **common,
@@ -64,6 +37,14 @@ def build_method(cfg: dict):
             mldg_first_order=bool(model_cfg.get('mldg_first_order', False)),
             mldg_split_seed=int(model_cfg.get('mldg_split_seed', 42)),
         ))
+    if method_name == 'vrex':
+        return VRExClassifier(VRExConfig(
+            **common,
+            vrex_lambda=float(model_cfg.get('vrex_lambda', 1.0)),
+            vrex_penalty_anneal_iters=int(model_cfg.get('vrex_penalty_anneal_iters', 0)),
+        ))
+
+
     if method_name == 'darm':
         return DARMClassifier(DARMConfig(
             **common,
@@ -72,6 +53,8 @@ def build_method(cfg: dict):
             darm_margin=float(model_cfg.get('darm_margin', 1.0)),
             darm_feature_normalize=bool(model_cfg.get('darm_feature_normalize', True)),
         ))
+
+
     if method_name == 'dpjdg':
         return DPJDGClassifier(DPJDGConfig(
             **common,
@@ -81,6 +64,8 @@ def build_method(cfg: dict):
             dpjdg_mask_ratio=float(model_cfg.get('dpjdg_mask_ratio', 0.05)),
             dpjdg_rbf_gamma=float(model_cfg.get('dpjdg_rbf_gamma', 1.0)),
         ))
+
+
 
     if method_name == 'mcpdg':
         return MCPDGClassifier(MCPDGConfig(
@@ -113,10 +98,7 @@ def build_method(cfg: dict):
 __all__ = [
     'BaseDGClassifier', 'BaseDGConfig',
     'ERMClassifier', 'ERMConfig',
-    'MixStyleClassifier', 'MixStyleConfig',
-    'IRMClassifier', 'IRMConfig',
     'VRExClassifier', 'VRExConfig',
-    'GroupDROClassifier', 'GroupDROConfig',
     'MLDGClassifier', 'MLDGConfig',
     'DARMClassifier', 'DARMConfig',
     'DPJDGClassifier', 'DPJDGConfig',

@@ -2,319 +2,34 @@
 # 批量执行指令的脚本
 set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安全性）
 
-#echo darm 模型
-#python -m src.main --configs src/configs/darm/darm_phm_T1_1.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T1_5.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T1_10.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T1_20.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T2_1.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T2_5.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T2_10.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T2_20.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T3_1.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T3_5.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T3_10.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T3_20.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T4_1.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T4_5.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T4_10.yaml
-#python -m src.main --configs src/configs/darm/darm_phm_T4_20.yaml
+echo "======== 开始执行第一个脚本 erm========"
+./train-erm.sh
 
-#python -m src.main --configs src/configs/darm/darm_pu_T5_1.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T5_5.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T5_10.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T5_20.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T6_1.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T6_5.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T6_10.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T6_20.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T7_1.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T7_5.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T7_10.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T7_20.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T8_1.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T8_5.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T8_10.yaml
-#python -m src.main --configs src/configs/darm/darm_pu_T8_20.yaml
-#
-#echo dpjdg 模型
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T1_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T1_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T1_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T1_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T3_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T3_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T3_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T3_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T4_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T4_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T4_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T5_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T5_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T5_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T5_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T6_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T6_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T6_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T6_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T7_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T7_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T7_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T7_20.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T8_1.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T8_5.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T8_10.yaml
-#python -m src.main --configs src/configs/dpjdg/dpjdg_pu_T8_20.yaml
-#
-#echo erm 模型
-#python -m src.main --configs src/configs/erm/erm_phm_T1_1.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T1_5.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T1_10.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T1_20.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T2_1.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T2_5.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T2_10.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T2_20.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T3_1.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T3_5.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T3_10.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T3_20.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T4_1.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T4_5.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T4_10.yaml
-#python -m src.main --configs src/configs/erm/erm_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/erm/erm_pu_T5_1.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T5_5.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T5_10.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T5_20.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T6_1.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T6_5.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T6_10.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T6_20.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T7_1.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T7_5.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T7_10.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T7_20.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T8_1.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T8_5.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T8_10.yaml
-#python -m src.main --configs src/configs/erm/erm_pu_T8_20.yaml
-#
-#echo groupdro 模型
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T1_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T1_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T1_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T1_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T2_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T2_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T2_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T2_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T3_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T3_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T3_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T3_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T4_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T4_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T4_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T5_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T5_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T5_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T5_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T6_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T6_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T6_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T6_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T7_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T7_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T7_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T7_20.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T8_1.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T8_5.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T8_10.yaml
-#python -m src.main --configs src/configs/groupdro/groupdro_pu_T8_20.yaml
-#
-#echo irm 模型
-#python -m src.main --configs src/configs/irm/irm_phm_T1_1.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T1_5.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T1_10.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T1_20.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T2_1.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T2_5.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T2_10.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T2_20.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T3_1.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T3_5.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T3_10.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T3_20.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T4_1.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T4_5.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T4_10.yaml
-#python -m src.main --configs src/configs/irm/irm_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/irm/irm_pu_T5_1.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T5_5.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T5_10.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T5_20.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T6_1.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T6_5.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T6_10.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T6_20.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T7_1.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T7_5.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T7_10.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T7_20.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T8_1.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T8_5.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T8_10.yaml
-#python -m src.main --configs src/configs/irm/irm_pu_T8_20.yaml
-#
-#echo mixstyle 模型
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T1_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T1_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T1_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T1_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T2_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T2_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T2_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T2_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T3_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T3_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T3_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T3_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T4_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T4_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T4_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T5_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T5_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T5_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T5_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T6_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T6_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T6_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T6_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T7_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T7_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T7_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T7_20.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T8_1.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T8_5.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T8_10.yaml
-#python -m src.main --configs src/configs/mixstyle/mixstyle_pu_T8_20.yaml
-#
-#echo mldg 模型
-#python -m src.main --configs src/configs/mldg/mldg_phm_T1_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T1_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T1_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T1_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T2_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T2_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T2_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T2_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T3_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T3_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T3_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T3_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T4_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T4_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T4_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/mldg/mldg_pu_T5_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T5_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T5_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T5_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T6_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T6_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T6_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T6_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T7_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T7_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T7_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T7_20.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T8_1.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T8_5.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T8_10.yaml
-#python -m src.main --configs src/configs/mldg/mldg_pu_T8_20.yaml
+echo "======== 开始执行第二个脚本 mldg========"
+./train-mldg.sh
 
-#echo vrex 模型
-#python -m src.main --configs src/configs/vrex/vrex_phm_T1_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T1_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T1_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T1_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T2_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T2_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T2_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T2_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T3_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T3_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T3_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T3_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T4_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T4_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T4_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_phm_T4_20.yaml
-#
-#python -m src.main --configs src/configs/vrex/vrex_pu_T5_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T5_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T5_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T5_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T6_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T6_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T6_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T6_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T7_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T7_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T7_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T7_20.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T8_1.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T8_5.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T8_10.yaml
-#python -m src.main --configs src/configs/vrex/vrex_pu_T8_20.yaml
+echo "======== 开始执行第三个脚本 vrex========"
+./train-vrex.sh
 
-echo mcpdg 模型
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T1_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T1_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T1_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T1_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T3_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T3_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T3_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T3_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T4_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T4_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T4_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T4_20.yaml
+echo "======== 开始执行第四个脚本 dfdn========"
+./train-dfdn.sh
 
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T5_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T5_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T5_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T5_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T6_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T6_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T6_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T6_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T7_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T7_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T7_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T7_20.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T8_1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T8_5.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T8_10.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T8_20.yaml
+echo "======== 开始执行第五个脚本 darm========"
+./train-darm.sh
 
-#shutdown -h now
+echo "======== 开始执行第六个脚本 sdagn========"
+./train-sdagn.sh
+
+echo "======== 开始执行第七个脚本 dpjdg========"
+./train-dpjdg.sh
+
+echo "======== 开始执行第八个脚本 masfd========"
+./train-masfd.sh
+
+echo "======== 开始执行第九个脚本 masfd========"
+./train-mcpdg.sh
+
+
+
+echo "======== 所有脚本执行完成 ========"
+shutdown -h now
