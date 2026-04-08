@@ -39,7 +39,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # 脚本所在目录的绝对路径
     output_dir = script_dir  # 输出目录 = 脚本所在目录
     num_vals = ["1", "5", "10"]  # 4个数值后缀（固定）
-    conunt = 9
+    conunt = 10
 
     # 修改这个
     model = "dpjdg"

@@ -7,12 +7,12 @@ def generate_model_file_paths():
     models = [
                 # "darm",
               # "dpjdg",
-    #           "erm",
-    #           "groupdro",
+              "erm",
+              "groupdro",
     #           "irm",
     #           "mixstyle",
     #           "mldg",
-              "vrex",
+    #           "vrex",
     #           "mcpdg"
               ]  # 7个模型
     num_vals = ["1", "5", "10"]  # 数值后缀
