@@ -5,8 +5,8 @@ def generate_model_file_paths():
     """
     # 1. 配置基础参数
     models = [
-                # "darm",
-              "dpjdg",
+                "darm",
+              # "dpjdg",
     #           "erm",
     #           "groupdro",
     #           "irm",

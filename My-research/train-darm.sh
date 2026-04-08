@@ -1,3 +1,7 @@
+#!/bin/bash
+# 批量执行指令的脚本
+set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安全性）
+
 echo darm 模型
 python -m src.main --configs src/configs/darm/darm_phm_T1_1-1.yaml
 python -m src.main --configs src/configs/darm/darm_phm_T1_1-2.yaml
@@ -240,3 +244,5 @@ python -m src.main --configs src/configs/darm/darm_pu_T8_10-7.yaml
 python -m src.main --configs src/configs/darm/darm_pu_T8_10-8.yaml
 python -m src.main --configs src/configs/darm/darm_pu_T8_10-9.yaml
 python -m src.main --configs src/configs/darm/darm_pu_T8_10-10.yaml
+echo 关机
+shutdown -h now
