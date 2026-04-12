@@ -63,6 +63,7 @@ class MCPDGClassifier(BaseDGClassifier):
         self.pcl_temperature = float(cfg.pcl_temperature)
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
+        self.condition_table = None
 
         self.class_embed = nn.Embedding(
             self.num_classes,
@@ -94,22 +95,10 @@ class MCPDGClassifier(BaseDGClassifier):
         )
     # external hook for main.py
     def set_condition_lookup(self, condition_table) -> None:
-        # Accept:
-        #     1) torch.Tensor [num_domains, cond_dim]
-        #     2) dict[int, list/tuple/tensor]
-        if torch.is_tensor(condition_table):
-            if condition_table.dim() != 2: raise ValueError("condition_table tensor must be [num_domains, cond_dim]")
-            self.condition_table = condition_table.float()
-            return
-
-        if isinstance(condition_table, dict):
-            max_domain_id = max(int(k) for k in condition_table.keys())
-            table = torch.zeros(max_domain_id + 1, int(self.cfg.cond_dim), dtype=torch.float32)
-            for domain_id, cond_vec in condition_table.items():
-                table[int(domain_id)] = torch.as_tensor(cond_vec, dtype=torch.float32)
-            self.condition_table = table
-            return
-        raise TypeError("condition_table must be torch.Tensor or dict")
+        if condition_table.dim() != 2:
+            raise ValueError("condition_table tensor must be [num_domains, cond_dim]")
+        self.condition_table = condition_table.float()
+        return
 
     def _lookup_condition(self, domains: torch.Tensor) -> torch.Tensor:
         max_id = int(domains.max().item())

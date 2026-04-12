@@ -70,12 +70,7 @@ class Trainer:
 
     def _compute_model_step(self, batch: Dict[str, torch.Tensor], epoch: int) -> Dict[str, torch.Tensor]:
         """单次前向传播计算（支持模型自定义loss计算）"""
-        if hasattr(self.model, 'compute_loss'):
-            return self.model.compute_loss(batch, self.criterion, epoch=epoch, global_step=self.global_step)
-
-        out = self.model(batch)
-        out['loss'] = self.criterion(out['logits'], batch['y'])
-        return out
+        return self.model.compute_loss(batch, self.criterion, epoch=epoch, global_step=self.global_step)
 
     @staticmethod
     def _tensor_to_scalar(v) -> Optional[float]:
@@ -177,17 +172,12 @@ class Trainer:
         self.test_loader = None
 
     def fit(self) -> List[Dict]:
-        """主训练流程：遍历epochs训练，最终评估并保存结果"""
         epochs = int(self.cfg['train']['epochs'])
         history: List[Dict] = []
 
         for epoch in range(1, epochs + 1):
-            # 训练一个epoch
-            train_metrics = self.train_one_epoch(epoch)
-
-            # 更新学习率
-            if self.scheduler is not None:
-                self.scheduler.step()
+            train_metrics = self.train_one_epoch(epoch)# 训练一个epoch
+            self.scheduler.step()# 更新学习率
 
             # 记录训练结果
             train_row = {
@@ -203,7 +193,6 @@ class Trainer:
             # 保存checkpoint（如果配置开启）
             if self.cfg.get('output', {}).get('save_checkpoint', False):
                 save_trainer_checkpoint(output_dir=self.output_dir, epoch=epoch, history=history, model=self.model, optimizer=self.optimizer, scheduler=self.scheduler,cfg=self.cfg)
-            # 打印训练日志
             log_train_epoch(self.logger, epoch, epochs, train_metrics)
 
         # 最终测试
@@ -213,12 +202,9 @@ class Trainer:
         history.append(final_row)
         self.recorder.append(final_row)
         self.recorder.flush()
-        # 导出混淆矩阵
-        export_final_confusion_matrix(cm=cm, test_loader=self.test_loader, num_classes=int(self.cfg['data']['num_classes']), output_dir=self.output_dir)
-        # 打印最终测试日志
-        log_final_test(self.logger, final_metrics)
-        # 保存最终测试指标
-        save_final_test_metrics(self.output_dir, epochs, final_metrics)
+        export_final_confusion_matrix(cm=cm, test_loader=self.test_loader, num_classes=int(self.cfg['data']['num_classes']), output_dir=self.output_dir)# 导出混淆矩阵
+        log_final_test(self.logger, final_metrics)# 打印最终测试日志
+        save_final_test_metrics(self.output_dir, epochs, final_metrics)       # 保存最终测试指标
         # 释放资源
         self.close()
         return history

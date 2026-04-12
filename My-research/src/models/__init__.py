@@ -35,7 +35,6 @@ def build_method(cfg: dict):
             mldg_inner_lr=float(model_cfg.get('mldg_inner_lr', 1e-2)),
             mldg_meta_test_domains=int(model_cfg.get('mldg_meta_test_domains', 1)),
             mldg_first_order=bool(model_cfg.get('mldg_first_order', False)),
-            mldg_split_seed=int(model_cfg.get('mldg_split_seed', 42)),
         ))
     if method_name == 'vrex':
         return VRExClassifier(VRExConfig(
