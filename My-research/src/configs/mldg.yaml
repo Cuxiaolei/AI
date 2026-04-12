@@ -6,11 +6,8 @@ method:
 model:
   feature_mode: freq
   freq_backbone_name: resnet1d18
-  tf_backbone_name: resnet18
   freq_in_channels: 1
-  tf_in_channels: 1
   freq_pretrained: false
-  tf_pretrained: false
   classifier_dropout: 0.0
   backbone_kwargs:
     norm: bn
@@ -23,8 +20,11 @@ model:
   mldg_first_order: false
   mldg_split_seed: 42
 
-output:
-  exp_name: mldg_freq_resnet1d18
+loss:
+  name: ce
+  use_class_weights: false  # 类别不平衡时建议开启
+  gamma: 2.0
+
 
 sampler:
   enabled: true
