@@ -7,9 +7,11 @@ from .vrex import VRExClassifier, VRExConfig
 from .dfdn import DFDNClassifier, DFDNConfig
 from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
-from .dpjdg import DPJDGClassifier, DPJDGConfig
-from .mcpdg import MCPDGClassifier, MCPDGConfig
 from .sdagn import SDAGNClassifier, SDAGNConfig
+from .dpjdg import DPJDGClassifier, DPJDGConfig
+from .masfd import MASFDClassifier, MASFDConfig
+from .mcpdg import MCPDGClassifier, MCPDGConfig
+
 
 def _common_cfg(cfg: dict):
     model_cfg = cfg['model']
@@ -103,6 +105,24 @@ def build_method(cfg: dict):
             dpjdg_rbf_gamma=float(model_cfg.get('dpjdg_rbf_gamma', 1.0)),
         ))
 
+    if method_name == 'masfd':
+        return MASFDClassifier(MASFDConfig(
+            **common,
+            num_domains=int(cfg['data'].get('num_domains', 0)),
+            num_modes=int(model_cfg.get('num_modes', 3)),
+            mode_channels=int(model_cfg.get('mode_channels', 32)),
+            mode_feat_dim=int(model_cfg.get('mode_feat_dim', 128)),
+            fusion_hidden_dim=int(model_cfg.get('fusion_hidden_dim', 128)),
+            cls_weight=float(model_cfg.get('cls_weight', 1.0)),
+            aux_cls_weight=float(model_cfg.get('aux_cls_weight', 0.5)),
+            domain_spec_weight=float(model_cfg.get('domain_spec_weight', 0.5)),
+            domain_inv_weight=float(model_cfg.get('domain_inv_weight', 0.2)),
+            ortho_weight=float(model_cfg.get('ortho_weight', 0.05)),
+            meta_weight=float(model_cfg.get('meta_weight', 0.5)),
+            grl_lambda=float(model_cfg.get('grl_lambda', 1.0)),
+            eval_aux_weight=float(model_cfg.get('eval_aux_weight', 0.25)),
+            meta_min_samples=int(model_cfg.get('meta_min_samples', 2)),
+        ))
 
 
     if method_name == 'mcpdg':
@@ -142,6 +162,7 @@ __all__ = [
     'DARMClassifier', 'DARMConfig',
     'SDAGNClassifier', 'SDAGNConfig',
     'DPJDGClassifier', 'DPJDGConfig',
+    'MASFDClassifier', 'MASFDConfig',
     'MCPDGClassifier', 'MCPDGConfig',
     'build_method',
 ]

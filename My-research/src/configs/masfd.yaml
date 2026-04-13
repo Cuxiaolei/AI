@@ -1,0 +1,41 @@
+BASE: base.yaml
+
+data:
+  train_h5: data/PHM_spur/PHM_spur8_T1_300-1/train.h5
+  test_h5: data/PHM_spur/PHM_spur8_T1_300-1/test.h5
+  dataset_name: phm
+  num_classes: 8
+
+method:
+  name: masfd
+
+model:
+  freq_backbone_name: resnet1d18
+  freq_in_channels: 1
+  freq_pretrained: false
+  classifier_dropout: 0.1
+  backbone_kwargs:
+    base_channels: 64
+    norm: bn
+    act: elu
+
+  num_modes: 3
+  mode_channels: 32
+  mode_feat_dim: 128
+  fusion_hidden_dim: 128
+
+  cls_weight: 1.0
+  aux_cls_weight: 0.5
+  domain_spec_weight: 0.5
+  domain_inv_weight: 0.2
+  ortho_weight: 0.05
+  meta_weight: 0.5
+
+  grl_lambda: 1.0
+  eval_aux_weight: 0.25
+  meta_min_samples: 2
+
+
+output:
+  root: outputs
+  exp_name: darm_phm_T1_300-1
