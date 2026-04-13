@@ -1,0 +1,11 @@
+
+BASE: ../sdagn.yaml
+
+data:
+  train_h5: /root/data/pu/pu_T5_1/train.h5
+  test_h5: /root/data/pu/pu_T5_1/test.h5
+  dataset_name: pu
+  num_classes: 9
+
+output:
+  exp_name: sdagn_pu_T5_1-10
