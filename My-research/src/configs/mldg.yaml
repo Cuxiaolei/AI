@@ -22,7 +22,7 @@ model:
 
 loss:
   name: ce
-  use_class_weights: false  # 类别不平衡时建议开启
+  use_class_weights: false
   gamma: 2.0
 
 

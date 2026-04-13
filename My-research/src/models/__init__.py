@@ -4,6 +4,7 @@ from __future__ import annotations
 from .base import BaseDGClassifier, BaseDGConfig
 from .erm import ERMClassifier, ERMConfig
 from .vrex import VRExClassifier, VRExConfig
+from .dfdn import DFDNClassifier, DFDNConfig
 from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
 from .dpjdg import DPJDGClassifier, DPJDGConfig
@@ -41,6 +42,27 @@ def build_method(cfg: dict):
             **common,
             vrex_lambda=float(model_cfg.get('vrex_lambda', 1.0)),
             vrex_penalty_anneal_iters=int(model_cfg.get('vrex_penalty_anneal_iters', 0)),
+        ))
+
+    if method_name == 'dfdn':
+        return DFDNClassifier(DFDNConfig(
+            **common,
+            num_domains=int(cfg['data']['num_domains']),
+            decouple_hidden_dim=int(model_cfg.get('decouple_hidden_dim', 512)),
+            fault_feat_dim=int(model_cfg.get('fault_feat_dim', 256)),
+            domain_feat_dim=int(model_cfg.get('domain_feat_dim', 256)),
+            integrator_hidden_dim=int(model_cfg.get('integrator_hidden_dim', 256)),
+            domain_disc_hidden_dim=int(model_cfg.get('domain_disc_hidden_dim', 256)),
+            disc_dropout=float(model_cfg.get('disc_dropout', 0.1)),
+            lambda_fault_cls=float(model_cfg.get('lambda_fault_cls', 1.0)),
+            lambda_aux_cls=float(model_cfg.get('lambda_aux_cls', 0.5)),
+            lambda_domain_cls=float(model_cfg.get('lambda_domain_cls', 1.0)),
+            lambda_adv_domain=float(model_cfg.get('lambda_adv_domain', 0.1)),
+            lambda_orth=float(model_cfg.get('lambda_orth', 0.05)),
+            lambda_fused_align=float(model_cfg.get('lambda_fused_align', 0.0)),
+            grl_lambda=float(model_cfg.get('grl_lambda', 1.0)),
+            use_grl_schedule=bool(model_cfg.get('use_grl_schedule', True)),
+            grl_warmup_steps=int(model_cfg.get('grl_warmup_steps', 1000)),
         ))
 
 
