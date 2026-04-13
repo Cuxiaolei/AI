@@ -90,7 +90,6 @@ def main():
         persistent_workers=(num_workers > 0),
     )
     cfg['data']['num_domains'] = int(train_dataset.get_num_domains())
-    print(cfg['data']['num_domains'])
     model = build_method(cfg)
 
     method_name = str(cfg['method']['name']).lower()

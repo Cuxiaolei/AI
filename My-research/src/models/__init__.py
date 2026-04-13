@@ -9,7 +9,7 @@ from .mldg import MLDGClassifier, MLDGConfig
 from .darm import DARMClassifier, DARMConfig
 from .dpjdg import DPJDGClassifier, DPJDGConfig
 from .mcpdg import MCPDGClassifier, MCPDGConfig
-
+from .sdagn import SDAGNClassifier, SDAGNConfig
 
 def _common_cfg(cfg: dict):
     model_cfg = cfg['model']
@@ -75,6 +75,23 @@ def build_method(cfg: dict):
             darm_feature_normalize=bool(model_cfg.get('darm_feature_normalize', True)),
         ))
 
+    if method_name == 'sdagn':
+        return SDAGNClassifier(SDAGNConfig(
+            **common,
+            sdagn_mixup_alpha=float(model_cfg.get('sdagn_mixup_alpha', 0.4)),
+            sdagn_mixup_mode=str(model_cfg.get('sdagn_mixup_mode', 'beta')),
+            sdagn_cls_weight=float(model_cfg.get('sdagn_cls_weight', 1.0)),
+            sdagn_aug_cls_weight=float(model_cfg.get('sdagn_aug_cls_weight', 1.0)),
+            sdagn_semantic_weight=float(model_cfg.get('sdagn_semantic_weight', 1.0)),
+            sdagn_triplet_weight=float(model_cfg.get('sdagn_triplet_weight', 0.1)),
+            sdagn_triplet_margin=float(model_cfg.get('sdagn_triplet_margin', 1.0)),
+            sdagn_mmd_gamma=float(model_cfg.get('sdagn_mmd_gamma', 1.0)),
+            sdagn_mmd_num_kernels=int(model_cfg.get('sdagn_mmd_num_kernels', 1)),
+            sdagn_normalize_triplet_feat=bool(model_cfg.get('sdagn_normalize_triplet_feat', True)),
+            sdagn_max_aug_per_class=int(model_cfg.get('sdagn_max_aug_per_class', 64)),
+            sdagn_balance_to_max=bool(model_cfg.get('sdagn_balance_to_max', True)),
+            sdagn_min_samples_per_class_to_mix=int(model_cfg.get('sdagn_min_samples_per_class_to_mix', 2)),
+        ))
 
     if method_name == 'dpjdg':
         return DPJDGClassifier(DPJDGConfig(
@@ -120,8 +137,10 @@ __all__ = [
     'BaseDGClassifier', 'BaseDGConfig',
     'ERMClassifier', 'ERMConfig',
     'VRExClassifier', 'VRExConfig',
+    'DFDNClassifier', 'DFDNConfig',
     'MLDGClassifier', 'MLDGConfig',
     'DARMClassifier', 'DARMConfig',
+    'SDAGNClassifier', 'SDAGNConfig',
     'DPJDGClassifier', 'DPJDGConfig',
     'MCPDGClassifier', 'MCPDGConfig',
     'build_method',
