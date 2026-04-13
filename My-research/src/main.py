@@ -40,6 +40,8 @@ def main():
     test_batch_size = int(cfg['train'].get('test_batch_size', batch_size))
 
 
+
+
     train_dataset = build_dataset(
         h5_path=cfg['data']['train_h5'],
         dataset_name=cfg['data']['dataset_name'],
@@ -87,7 +89,8 @@ def main():
         drop_last=False,
         persistent_workers=(num_workers > 0),
     )
-
+    cfg['data']['num_domains'] = int(train_dataset.get_num_domains())
+    print(cfg['data']['num_domains'])
     model = build_method(cfg)
 
     method_name = str(cfg['method']['name']).lower()

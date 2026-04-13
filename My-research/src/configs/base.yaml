@@ -10,6 +10,7 @@ data:
   test_h5: data/PHM_spur/PHM_spur8_T1_300-1/test.h5
   dataset_name: phm
   num_classes: 8
+  num_domains: 4
   num_workers: 16
   pin_memory: true
   drop_last_train: false
