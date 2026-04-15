@@ -79,7 +79,7 @@ model:
   eval_proto_weight: 0.5
 
   # 新增
-  minority_calib_weight: 0.6
+  minority_calib_weight: 1
 
   meta_debug: false
   meta_debug_max_steps: 20
