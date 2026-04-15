@@ -63,7 +63,7 @@ model:
   # imbalance_power: 类别不平衡加权强度
   # =========================
   align_weight: 1.0
-  pcl_weight: 0.1
+  pcl_weight: 0.2
   meta_test_weight: 0.5
   pcl_temperature: 0.1
   imbalance_power: 0.5
