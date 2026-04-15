@@ -63,7 +63,7 @@ class MCPDGClassifier(BaseDGClassifier):
         self.pcl_temperature = float(cfg.pcl_temperature)
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
-        self.condition_table = None
+        # self.condition_table = None
         self.register_buffer(
             "condition_table",
             torch.zeros(1, int(cfg.cond_dim)),
