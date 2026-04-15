@@ -39,7 +39,7 @@ model:
   use_meta_loss: true
 
   # 新增
-  use_disentangled_proto: false
+  use_disentangled_proto: true
   use_minority_calib_loss: false
 
   # =========================
