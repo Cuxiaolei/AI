@@ -5,6 +5,10 @@ set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安�
 #echo "======== 开始执行第一个脚本 erm========"
 #./train-erm.sh
 
+echo "======== 开始执行第九个脚本 masfd========"
+./train-mcpdg.sh
+
+
 echo "======== 开始执行第二个脚本 mldg========"
 ./train-mldg.sh
 
@@ -26,8 +30,6 @@ echo "======== 开始执行第二个脚本 mldg========"
 #echo "======== 开始执行第八个脚本 masfd========"
 #./train-masfd.sh
 #
-echo "======== 开始执行第九个脚本 masfd========"
-./train-mcpdg.sh
 
 
 
