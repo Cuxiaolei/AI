@@ -74,7 +74,7 @@ model:
   # proto_cls_weight: 原型分类损失在总损失中的权重
   # eval_proto_weight: 推理时原型 logits 融合强度
   # =========================
-  proto_residual_alpha: 0.3
+  proto_residual_alpha: 0.5
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
 
