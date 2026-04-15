@@ -8,17 +8,6 @@ data:
 method:
   name: mcpdg
 
-
-sampler:
-  enabled: false
-  domains_per_batch: 3
-  samples_per_domain: null
-  debug_max_steps: 20
-
-  shuffle: true
-  drop_last: false
-  seed: 42
-
 model:
   feature_mode: freq
   freq_backbone_name: resnet1d18

@@ -25,11 +25,3 @@ loss:
   use_class_weights: false
   gamma: 2.0
 
-
-sampler:
-  enabled: true
-  name: meta_domain_batch_sampler
-  domains_per_batch: 3
-  samples_per_domain: null
-  shuffle: true
-  drop_last: false
