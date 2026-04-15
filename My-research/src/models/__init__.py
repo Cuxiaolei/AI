@@ -124,7 +124,6 @@ def build_method(cfg: dict):
             meta_min_samples=int(model_cfg.get('meta_min_samples', 2)),
         ))
 
-
     if method_name == 'mcpdg':
         return MCPDGClassifier(MCPDGConfig(
             **common,
@@ -137,6 +136,10 @@ def build_method(cfg: dict):
             use_proto_cls=bool(model_cfg.get('use_proto_cls', True)),
             use_align_loss=bool(model_cfg.get('use_align_loss', True)),
             use_pcl_loss=bool(model_cfg.get('use_pcl_loss', True)),
+            use_meta_loss=bool(model_cfg.get('use_meta_loss', True)),
+
+            use_disentangled_proto=bool(model_cfg.get('use_disentangled_proto', True)),
+            use_minority_calib_loss=bool(model_cfg.get('use_minority_calib_loss', True)),
 
             proto_residual_alpha=float(model_cfg.get('proto_residual_alpha', 0.2)),
             proto_cls_weight=float(model_cfg.get('proto_cls_weight', 0.5)),
@@ -144,12 +147,12 @@ def build_method(cfg: dict):
             align_weight=float(model_cfg.get('align_weight', 1.0)),
             pcl_weight=float(model_cfg.get('pcl_weight', 0.1)),
             pcl_temperature=float(model_cfg.get('pcl_temperature', 0.1)),
+            meta_test_weight=float(model_cfg.get('meta_test_weight', 1.0)),
             imbalance_power=float(model_cfg.get('imbalance_power', 0.5)),
+            minority_calib_weight=float(model_cfg.get('minority_calib_weight', 0.1)),
 
-
-            meta_split_seed=int(model_cfg.get('meta_split_seed', 42)),
             meta_debug=bool(model_cfg.get('meta_debug', False)),
-            meta_debug_max_steps = int(model_cfg.get('meta_debug_max_steps', 20)),
+            meta_debug_max_steps=int(model_cfg.get('meta_debug_max_steps', 20)),
         ))
     raise ValueError(f'Unsupported method: {method_name}')
 

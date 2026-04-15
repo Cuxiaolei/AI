@@ -18,34 +18,14 @@ class DynamicPrototypeGenerator(nn.Module):
             nn.Linear(hidden_dim, feat_dim),
         )
 
-    def forward(
-        self,
-        class_anchor: torch.Tensor,
-        cond_emb: torch.Tensor,
-        return_parts: bool = False,
-    ):
-        # class_anchor: [K, C]
-        # cond_emb:     [D, C]
-        # return:
-        #   proto:              [D, K, C]
-        #   proto_base:         [D, K, C]
-        #   proto_residual:     [D, K, C]
-        d = cond_emb.size(0)
-        k = class_anchor.size(0)
-        c = class_anchor.size(1)
+    def forward(self, class_anchor: torch.Tensor, cond_emb: torch.Tensor) -> torch.Tensor:
+        d = cond_emb.size(0) # class_anchor: [K, C]
+        k = class_anchor.size(0) # cond_emb:     [D, C]
+        c = class_anchor.size(1)# return:       [D, K, C]
 
         anchor_expand = class_anchor.unsqueeze(0).expand(d, k, c)
         cond_expand = cond_emb.unsqueeze(1).expand(d, k, c)
 
         delta = self.mlp(torch.cat([anchor_expand, cond_expand], dim=-1))
-        residual = self.alpha * delta
-        proto_base = anchor_expand
-        proto = F.normalize(proto_base + residual, dim=-1)
-
-        if return_parts:
-            return {
-                "proto": proto,
-                "proto_base": proto_base,
-                "proto_residual": residual,
-            }
-        return proto
+        proto = anchor_expand + self.alpha * delta
+        return F.normalize(proto, dim=-1)

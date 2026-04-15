@@ -194,3 +194,15 @@ def build_condition_table_from_datasets(
         domain_id_to_name=domain_id_to_name,
         dataset_name=dataset_name,
     )
+
+def build_condition_table_from_dataset(
+    dataset,
+    dataset_name: str,
+) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    domain_id_to_name = _collect_domain_map_from_dataset(dataset)
+    if len(domain_id_to_name) == 0:
+        raise ValueError("No valid domain_map found in dataset.")
+    return build_condition_table(
+        domain_id_to_name=domain_id_to_name,
+        dataset_name=dataset_name,
+    )

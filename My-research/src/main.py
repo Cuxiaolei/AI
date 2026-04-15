@@ -10,10 +10,9 @@ from torch.utils.data import DataLoader
 from src.datasets import build_dataset
 from src.models import build_method
 from src.trainer import Trainer
-from src.condiition.condition_utils import build_condition_table_from_datasets
+from src.components.condition_utils import build_condition_table_from_dataset
 from src.utils.config import dump_yaml, load_config
 from src.utils.runtime import get_device, set_seed
-
 
 
 def main():
@@ -22,7 +21,6 @@ def main():
     args = parser.parse_args()
     cfg = load_config(args.configs)
 
-    # 打印相关信息
     config_path = Path(args.configs)
     device = get_device(cfg['train'].get('device', 'auto'))
     print(f"开始训练，当前使用的配置文件：{config_path}")
@@ -69,18 +67,19 @@ def main():
         drop_last=False,
         persistent_workers=(num_workers > 0),
     )
+
     cfg['data']['num_domains'] = int(train_dataset.get_num_domains())
     model = build_method(cfg)
 
     method_name = str(cfg['method']['name']).lower()
     if method_name == 'mcpdg':
-        condition_table, meta = build_condition_table_from_datasets(
-            train_dataset=train_dataset,
-            test_dataset=test_dataset,
+        condition_table, meta = build_condition_table_from_dataset(
+            dataset=train_dataset,
             dataset_name=cfg['data']['dataset_name'],
         )
         model.set_condition_lookup(condition_table)
-        print(f"[Condition] table shape={tuple(condition_table.shape)} dataset={meta['dataset_name']}")
+        print(f"[Condition] train-only table shape={tuple(condition_table.shape)} dataset={meta['dataset_name']}")
+
     trainer = Trainer(cfg, model, train_loader, test_loader, device, output_dir)
     trainer.fit()
 

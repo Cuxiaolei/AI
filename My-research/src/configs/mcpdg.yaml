@@ -38,6 +38,10 @@ model:
   use_pcl_loss: true
   use_meta_loss: true
 
+  # 新增
+  use_disentangled_proto: true
+  use_minority_calib_loss: true
+
   # =========================
   # 工况条件与动态原型结构参数
   # cond_dim: 工况向量维度
@@ -74,7 +78,9 @@ model:
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
 
-  meta_split_seed: 42
+  # 新增
+  minority_calib_weight: 0.2
+
   meta_debug: false
   meta_debug_max_steps: 20
 
