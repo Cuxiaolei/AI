@@ -40,7 +40,7 @@ model:
 
   # 新增
   use_disentangled_proto: true
-  use_minority_calib_loss: false
+  use_minority_calib_loss: true
 
   # =========================
   # 工况条件与动态原型结构参数
@@ -63,7 +63,7 @@ model:
   # imbalance_power: 类别不平衡加权强度
   # =========================
   align_weight: 1.0
-  pcl_weight: 0.2
+  pcl_weight: 0.1
   meta_test_weight: 0.5
   pcl_temperature: 0.1
   imbalance_power: 0.5
@@ -74,7 +74,7 @@ model:
   # proto_cls_weight: 原型分类损失在总损失中的权重
   # eval_proto_weight: 推理时原型 logits 融合强度
   # =========================
-  proto_residual_alpha: 0.5
+  proto_residual_alpha: 0.3
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
 
