@@ -64,7 +64,11 @@ class MCPDGClassifier(BaseDGClassifier):
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
         self.condition_table = None
-
+        self.register_buffer(
+            "condition_table",
+            torch.zeros(1, int(cfg.cond_dim)),
+            persistent=False
+        )
         self.class_embed = nn.Embedding(
             self.num_classes,
             self.feat_dim
@@ -88,11 +92,7 @@ class MCPDGClassifier(BaseDGClassifier):
             )
         )
 
-        self.register_buffer(
-            "condition_table",
-            torch.zeros(1, int(cfg.cond_dim)),
-            persistent=False
-        )
+
     # external hook for main.py
     def set_condition_lookup(self, condition_table) -> None:
         if condition_table.dim() != 2:

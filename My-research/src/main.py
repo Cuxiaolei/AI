@@ -39,9 +39,6 @@ def main():
     batch_size = int(cfg['train']['batch_size'])
     test_batch_size = int(cfg['train'].get('test_batch_size', batch_size))
 
-
-
-
     train_dataset = build_dataset(
         h5_path=cfg['data']['train_h5'],
         dataset_name=cfg['data']['dataset_name'],
