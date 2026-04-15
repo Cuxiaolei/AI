@@ -51,31 +51,15 @@ def main():
         to_tensor=True
     )
 
-    batch_sampler = build_train_batch_sampler(
-        dataset=train_dataset,
-        sampler_cfg=cfg.get('sampler', None),
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=batch_size,
-        seed=int(cfg['train'].get('seed', 42)),
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=bool(cfg['data'].get('drop_last_train')),
+        persistent_workers=(num_workers > 0),
     )
-
-    if batch_sampler is not None:
-        train_loader = DataLoader(
-            train_dataset,
-            batch_sampler=batch_sampler,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=(num_workers > 0),
-        )
-    else:
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            drop_last=bool(cfg['data'].get('drop_last_train')),
-            persistent_workers=(num_workers > 0),
-        )
 
     test_loader = DataLoader(
         test_dataset,

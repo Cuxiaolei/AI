@@ -13,7 +13,7 @@ from src.losses.loss_aggregator import compute_branch_loss
 from src.components.condition_encoder import ConditionEncoder
 from src.components.dynamic_prototype import DynamicPrototypeGenerator
 from src.prototype.proto_ops import negative_sq_logits
-from src.datasets.samplers import AsymMetaSplitConfig, AsymMetaSplitter
+from src.datasets import AsymMetaSplitConfig, AsymMetaSplitter
 
 @dataclass
 class MCPDGConfig(BaseDGConfig):
@@ -63,12 +63,13 @@ class MCPDGClassifier(BaseDGClassifier):
         self.pcl_temperature = float(cfg.pcl_temperature)
         self.meta_test_weight = float(cfg.meta_test_weight)
         self.imbalance_power = float(cfg.imbalance_power)
-        # self.condition_table = None
+
         self.register_buffer(
             "condition_table",
             torch.zeros(1, int(cfg.cond_dim)),
             persistent=False
         )
+
         self.class_embed = nn.Embedding(
             self.num_classes,
             self.feat_dim
@@ -93,7 +94,6 @@ class MCPDGClassifier(BaseDGClassifier):
         )
 
 
-    # external hook for main.py
     def set_condition_lookup(self, condition_table) -> None:
         if condition_table.dim() != 2:
             raise ValueError("condition_table tensor must be [num_domains, cond_dim]")
