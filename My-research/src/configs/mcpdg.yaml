@@ -66,7 +66,7 @@ model:
   pcl_weight: 0.2
   meta_test_weight: 0.5
   pcl_temperature: 0.1
-  imbalance_power: 0.7
+  imbalance_power: 0.5
 
   # =========================
   # 原型生成与分类融合参数
@@ -79,7 +79,7 @@ model:
   eval_proto_weight: 0.5
 
   # 新增
-  minority_calib_weight: 0.2
+  minority_calib_weight: 0.4
 
   meta_debug: false
   meta_debug_max_steps: 20
