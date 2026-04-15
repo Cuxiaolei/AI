@@ -63,10 +63,10 @@ model:
   # imbalance_power: 类别不平衡加权强度
   # =========================
   align_weight: 1.0
-  pcl_weight: 0.1
+  pcl_weight: 0.2
   meta_test_weight: 0.5
   pcl_temperature: 0.1
-  imbalance_power: 0.5
+  imbalance_power: 0.7
 
   # =========================
   # 原型生成与分类融合参数
@@ -74,9 +74,9 @@ model:
   # proto_cls_weight: 原型分类损失在总损失中的权重
   # eval_proto_weight: 推理时原型 logits 融合强度
   # =========================
-  proto_residual_alpha: 0.3
+  proto_residual_alpha: 0.5
   proto_cls_weight: 0.5
-  eval_proto_weight: 0.4
+  eval_proto_weight: 0.5
 
   # 新增
   minority_calib_weight: 0.2
