@@ -261,10 +261,21 @@ class MCPDGClassifier(BaseDGClassifier):
                 "loss_minority_calib": stat["loss_minority_calib"],
             }
 
+
         split = self.meta_splitter.split(batch, step=global_step)
         if split is None:
-            raise ValueError(f"训练终止：meta_splitter.split() 返回空值 None，step={global_step}")
-
+            stat = self._compute_branch_objective(full_out, criterion)
+            return {
+                "logits": full_out["logits"],
+                "feature": full_out["feature"],
+                "loss": stat["loss"],
+                "loss_cls": stat["loss_cls"],
+                "loss_cls_linear": stat["loss_cls_linear"],
+                "loss_cls_proto": stat["loss_cls_proto"],
+                "loss_align": stat["loss_align"],
+                "loss_pcl": stat["loss_pcl"],
+                "loss_minority_calib": stat.get("loss_minority_calib", full_out["feature"].new_tensor(0.0)),
+            }
         meta_train_batch, meta_test_batch, _, _ = split
 
         train_out = self._forward_branch(meta_train_batch)
