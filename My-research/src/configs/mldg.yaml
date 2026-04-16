@@ -20,8 +20,3 @@ model:
   mldg_first_order: false
   mldg_split_seed: 42
 
-loss:
-  name: ce
-  use_class_weights: false
-  gamma: 2.0
-
