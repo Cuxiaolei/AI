@@ -25,8 +25,8 @@ model:
   eval_proto_weight: 0.5
 
   # base + A
-  use_dynamic_proto: true
-  use_disentangled_proto: true
+  use_dynamic_proto: false
+  use_disentangled_proto: false
   cond_dim: 3
   cond_hidden_dim: 64
   proto_hidden_dim: 256
@@ -42,7 +42,7 @@ model:
   minority_calib_weight: 0.3
 
   # base + C
-  use_meta_loss: false
+  use_meta_loss: true
   meta_test_weight: 0.5
   proto_residual_alpha: 0.5
 
