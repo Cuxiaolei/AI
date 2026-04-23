@@ -1,0 +1,55 @@
+BASE: base.yaml
+
+data:
+  train_h5: data/PHM_spur/PHM_spur8_T5_300-5/train.h5
+  test_h5: data/PHM_spur/PHM_spur8_T5_300-5/test.h5
+  dataset_name: phm          # phm / pu
+
+method:
+  name: mcpdg
+
+model:
+  feature_mode: freq
+  freq_backbone_name: resnet1d18
+  freq_in_channels: 1
+  freq_pretrained: false
+  classifier_dropout: 0.0
+  backbone_kwargs:
+    norm: bn
+    act: elu
+
+  # base(基本）
+  use_linear_head: true
+  use_proto_cls: true
+  proto_cls_weight: 0.5
+  eval_proto_weight: 0.5
+
+  # base + A
+  use_dynamic_proto: false
+  use_disentangled_proto: false
+  cond_dim: 3
+  cond_hidden_dim: 64
+  proto_hidden_dim: 256
+
+  # base + B
+  use_align_loss: false
+  use_pcl_loss: false
+  use_minority_calib_loss: false
+  align_weight: 1.0
+  pcl_weight: 0.2
+  pcl_temperature: 0.1
+  imbalance_power: 0.5
+  minority_calib_weight: 0.3
+
+  # base + C
+  use_meta_loss: true
+  meta_test_weight: 0.5
+  proto_residual_alpha: 0.5
+
+
+  meta_debug: false
+  meta_debug_max_steps: 20
+
+output:
+  root: outputs
+  exp_name: mcpdg_phm_T5_300-5

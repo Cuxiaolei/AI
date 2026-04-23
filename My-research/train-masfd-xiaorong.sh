@@ -1,3 +1,7 @@
+#!/bin/bash
+# 批量执行指令的脚本
+set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安全性）
+
 echo masfdE1 模型
 python -m src.main --configs src/configs/masfdE1/masfdE1_phm_T1_5-1.yaml
 python -m src.main --configs src/configs/masfdE1/masfdE1_phm_T1_5-2.yaml

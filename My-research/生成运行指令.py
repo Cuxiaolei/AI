@@ -12,13 +12,23 @@ def generate_model_file_paths():
               # "darm",
               # "sdagn",
               # "dpjdg",
-              "masfd",
+              "masfdE1",
+              "masfdE2",
+              "masfdE3",
+              "masfdE4",
+              "masfdE5",
+              "masfdE6",
+              "masfdE7",
               # "mcpdg"
     ]  # 7个模型
-    num_vals = ["1", "5", "10"]  # 数值后缀
+    num_vals = [
+        # "1",
+        "5",
+        # "10"
+    ]  # 数值后缀
     datasets = [
         {"name": "phm", "t_list": ["T1", "T2", "T3", "T4"]},  # PHM数据集
-        {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
+        # {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
     ]
 
     # 2. 生成每个模型的路径列表
@@ -32,7 +42,7 @@ def generate_model_file_paths():
             ds_paths = []
             for t_val in ds["t_list"]:
                 for num_val in num_vals:
-                    for i in range(1,11):
+                    for i in range(1,6):
                         path = f'python -m src.main --configs src/configs/{model}/{model}_{ds["name"]}_{t_val}_{num_val}-{i}.yaml'
                         ds_paths.append(path)
 

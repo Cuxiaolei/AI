@@ -77,8 +77,6 @@ model:
   proto_residual_alpha: 0.5
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
-
-  # 新增
   minority_calib_weight: 0.3
 
   meta_debug: false

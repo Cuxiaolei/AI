@@ -253,6 +253,7 @@ class MCPDGClassifier(BaseDGClassifier):
                 "logits": full_out["logits"],
                 "feature": full_out["feature"],
                 "loss": stat["loss"],
+
                 "loss_cls": stat["loss_cls"],
                 "loss_cls_linear": stat["loss_cls_linear"],
                 "loss_cls_proto": stat["loss_cls_proto"],

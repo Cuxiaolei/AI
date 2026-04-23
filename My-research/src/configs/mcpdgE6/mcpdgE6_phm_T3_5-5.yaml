@@ -1,0 +1,11 @@
+
+BASE: ../mcpdgE6.yaml
+
+data:
+  train_h5: /root/data/phm-spur/phm-spur_T3_5/train.h5
+  test_h5: /root/data/phm-spur/phm-spur_T3_5/test.h5
+  dataset_name: phm
+  num_classes: 8
+
+output:
+  exp_name: mcpdgE6_phm_T3_5-5
