@@ -247,8 +247,8 @@ class MCPDGClassifier(BaseDGClassifier):
     def compute_loss(self, batch: Dict[str, torch.Tensor], criterion, epoch: int = 0, global_step: int = 0) -> Dict[str, torch.Tensor]:
         full_out = self._forward_branch(batch)
 
-        if not self.use_meta_loss:
-            stat = self._compute_branch_objective(full_out, criterion)
+        def _pack_full_batch_result(stat: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+            zero = stat["loss"].detach().new_tensor(0.0)
             return {
                 "logits": full_out["logits"],
                 "feature": full_out["feature"],
@@ -260,10 +260,48 @@ class MCPDGClassifier(BaseDGClassifier):
                 "loss_align": stat["loss_align"],
                 "loss_pcl": stat["loss_pcl"],
                 "loss_minority_calib": stat["loss_minority_calib"],
+
+                # 为了和 meta 模式下的日志字段保持一致，这里补 0
+                "loss_cls_meta": zero,
+                "loss_cls_linear_meta": zero,
+                "loss_cls_proto_meta": zero,
+                "loss_align_meta": zero,
+                "loss_pcl_meta": zero,
+                "loss_minority_calib_meta": zero,
             }
+
+        # 不启用 meta loss，直接普通训练
+        if not self.use_meta_loss:
+            stat = self._compute_branch_objective(full_out, criterion)
+            return _pack_full_batch_result(stat)
 
 
         split = self.meta_splitter.split(batch, step=global_step)
+
+        # 关键修复：切分失败时回退到普通整 batch 损失
+        if split is None:
+            if self.cfg.meta_debug and global_step < self.cfg.meta_debug_max_steps:
+                domains = batch.get("domain", None)
+                labels = batch.get("y", None)
+
+                msg = f"[AsymMetaSplit][Step {global_step}] fallback_to_full_batch"
+                if domains is not None:
+                    unique_domains, counts = torch.unique(domains, return_counts=True)
+                    msg += (
+                        f" unique_domains={unique_domains.detach().cpu().tolist()}"
+                        f" domain_counts={counts.detach().cpu().tolist()}"
+                    )
+                if labels is not None:
+                    cls_ids, cls_counts = torch.unique(labels, return_counts=True)
+                    msg += (
+                        f" class_counts="
+                        f"{dict(zip(cls_ids.detach().cpu().tolist(), cls_counts.detach().cpu().tolist()))}"
+                    )
+                print(msg)
+
+            stat = self._compute_branch_objective(full_out, criterion)
+            return _pack_full_batch_result(stat)
+
         meta_train_batch, meta_test_batch, _, _ = split
 
         train_out = self._forward_branch(meta_train_batch)
