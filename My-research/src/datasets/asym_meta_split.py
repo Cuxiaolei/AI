@@ -12,6 +12,7 @@ class AsymMetaSplitConfig:
     debug: bool = False
     debug_max_steps: int = 20
 
+    # 新增：query 域内部划分参数
     query_ratio: float = 0.35
     min_query_size: int = 4
     max_query_size: int = 8
