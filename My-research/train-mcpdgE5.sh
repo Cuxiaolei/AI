@@ -1,0 +1,47 @@
+#!/bin/bash
+# 批量执行指令的脚本
+set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安全性）
+
+
+echo mcpdgE5 模型
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T1_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T1_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T1_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T1_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T1_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T2_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T2_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T2_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T2_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T2_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T3_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T3_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T3_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T3_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T3_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T4_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T4_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T4_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T4_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_phm_T4_5-5.yaml
+
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T5_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T5_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T5_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T5_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T5_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T6_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T6_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T6_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T6_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T6_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T7_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T7_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T7_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T7_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T7_5-5.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T8_5-1.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T8_5-2.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T8_5-3.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T8_5-4.yaml
+python -m src.main --configs src/configs/mcpdgE5/mcpdgE5_pu_T8_5-5.yaml

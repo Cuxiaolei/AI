@@ -12,14 +12,15 @@ def generate_model_file_paths():
               # "darm",
               # "sdagn",
               # "dpjdg",
-              "masfdE1",
-              "masfdE2",
-              "masfdE3",
-              "masfdE4",
-              "masfdE5",
-              "masfdE6",
-              "masfdE7",
-              # "mcpdg"
+              # "mcpdg",
+              "mcpdgE1",
+              "mcpdgE2",
+              "mcpdgE3",
+              "mcpdgE4",
+              "mcpdgE5",
+              "mcpdgE6",
+              "mcpdgE7",
+              "mcpdg"
     ]  # 7个模型
     num_vals = [
         # "1",
@@ -28,7 +29,7 @@ def generate_model_file_paths():
     ]  # 数值后缀
     datasets = [
         {"name": "phm", "t_list": ["T1", "T2", "T3", "T4"]},  # PHM数据集
-        # {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
+        {"name": "pu", "t_list": ["T5", "T6", "T7", "T8"]}  # PU数据集
     ]
 
     # 2. 生成每个模型的路径列表

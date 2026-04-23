@@ -9,8 +9,8 @@ echo "======== 开始执行第九个脚本 masfd========"
 ./train-mcpdg.sh
 
 
-echo "======== 开始执行第二个脚本 mldg========"
-./train-mldg.sh
+#echo "======== 开始执行第二个脚本 mldg========"
+#./train-mldg.sh
 
 #echo "======== 开始执行第三个脚本 vrex========"
 #./train-vrex.sh
