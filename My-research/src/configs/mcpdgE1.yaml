@@ -24,7 +24,7 @@ model:
   proto_cls_weight: 0.5
   eval_proto_weight: 0.5
 
-  # base + A  A 表示工况约束的解耦动态原型生成策略，用于将工况条件显式引入原型构建过程，使类别原型同时具备共享语义稳定性与工况适应性。
+  # base + A
   use_dynamic_proto: false
   use_disentangled_proto: false
   cond_dim: 3

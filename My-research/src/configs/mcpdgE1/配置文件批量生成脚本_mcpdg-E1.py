@@ -43,7 +43,7 @@ def main():
         "5",
         # "10"
     ]  # 4个数值后缀（固定）
-    conunt = 6
+    conunt = 10
 
     # 修改这个
     model = "mcpdgE1"
@@ -59,13 +59,13 @@ def main():
             "spur_num": 8  # PHM_spur固定
         },
         # 2. PU数据集：T5-T8 → 4个T值 × 4个数值 = 16个文件
-        # {
-        #     "name": "pu",
-        #     "class": 9,
-        #     "path_prefix": "pu",
-        #     "t_list": ["T5", "T6", "T7", "T8"],
-        #     "spur_num": ""  # 非PHM数据集无需spur
-        # }
+        {
+            "name": "pu",
+            "class": 9,
+            "path_prefix": "pu",
+            "t_list": ["T5", "T6", "T7", "T8"],
+            "spur_num": ""  # 非PHM数据集无需spur
+        }
     ]
 
     # ===================== 执行生成流程 =====================
