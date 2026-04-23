@@ -43,7 +43,7 @@ def main():
         "5",
         # "10"
     ]  # 4个数值后缀（固定）
-    conunt = 4
+    conunt = 5
 
     # 修改这个
     model = "mcpdgE4"
