@@ -3,10 +3,10 @@
 set -e  # 关键：任意指令失败则脚本立即退出（可选，增强安全性）
 
 echo "phm"
-python -m src.main --configs src/configs/darm/darm_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/darm/darm_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/darm/darm_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/darm/darm_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_5-1.yaml
 python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_1-1.yaml
 python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_5-1.yaml
 python -m src.main --configs src/configs/erm/erm_phm_T2_1-1.yaml
