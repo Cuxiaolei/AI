@@ -18,15 +18,21 @@ from openpyxl.utils import get_column_letter
 
 # ======================== 配置 ========================
 ROOT_DIR = r"D:\user\Documents\ai\paper\1_process\outputs\result"
+# ROOT_DIR = r"D:\user\Documents\ai\paper\1_process\outputs\result\xiaorong-new"
 OUTPUT_PARENT = r"D:\user\Documents\ai\paper\1_process\outputs\result\！handle"
 
-MODEL_LIST = ["erm", "mldg", "vrex", "dfdn", "darm", "sdagn", "dpjdg", "masfd", "mcpdg"]
+MODEL_LIST = ["erm", "mldg", "vrex", "dfdn", "darm", "sdagn", "dpjdg", "masfd", "mcpdgE8"]
+# MODEL_LIST = ["mcpdgE1", "mcpdgE2", "mcpdgE3", "mcpdgE4", "mcpdgE5", "mcpdgE6", "mcpdgE7", "mcpdgE8"]
 TARGET_DATASETS = ["phm", "pu"]
 TARGET_TASKS = {
     "phm": ["T1", "T2", "T3", "T4"],
     "pu": ["T5", "T6", "T7", "T8"]
 }
-TARGET_DATA_SIZES = ["1", "5", "10"]
+TARGET_DATA_SIZES = [
+    "1",
+    "5",
+    "10"
+]
 # 固定指标顺序（和显示名一一对应）
 METRIC_ORDER = [
     "acc",
