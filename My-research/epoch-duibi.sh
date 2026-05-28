@@ -7,20 +7,20 @@ echo "phm"
 #python -m src.main --configs src/configs/darm/darm_phm_T2_5-1.yaml
 #python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_1-1.yaml
 #python -m src.main --configs src/configs/dfdn/dfdn_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/erm/erm_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/erm/erm_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/masfd/masfd_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/masfd/masfd_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/mldg/mldg_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/mldg/mldg_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/sdagn/sdagn_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/sdagn/sdagn_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/vrex/vrex_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/vrex/vrex_phm_T2_5-1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_1-1.yaml
-python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/dpjdg/dpjdg_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/erm/erm_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/erm/erm_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/masfd/masfd_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/masfd/masfd_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/mldg/mldg_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/mldg/mldg_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/sdagn/sdagn_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/sdagn/sdagn_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/vrex/vrex_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/vrex/vrex_phm_T2_5-1.yaml
+#python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_1-1.yaml
+#python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T2_5-1.yaml
 
 
 echo "pu"
