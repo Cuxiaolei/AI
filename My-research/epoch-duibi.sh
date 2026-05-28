@@ -42,9 +42,3 @@ python -m src.main --configs src/configs/dfdn/vrex_pu_T2_1-1.yaml
 python -m src.main --configs src/configs/dfdn/vrex_pu_T2_5-1.yaml
 python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T2_1-1.yaml
 python -m src.main --configs src/configs/mcpdg/mcpdg_pu_T2_5-1.yaml
-
-
-
-
-echo "======== 所有脚本执行完成 ========"
-shutdown -h now

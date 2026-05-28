@@ -24,6 +24,3 @@ python -m src.main --configs src/configs/mcpdgE1/mcpdgE7_phm_T6_5-1.yaml
 python -m src.main --configs src/configs/mcpdg/mcpdg_phm_T6_5-1.yaml
 
 
-
-echo "======== 所有脚本执行完成 ========"
-shutdown -h now
