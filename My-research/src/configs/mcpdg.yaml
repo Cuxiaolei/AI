@@ -52,4 +52,4 @@ model:
 
 output:
   root: outputs
-  exp_name: mcpdg_phm_T5_300-5
+  exp_name: mcpdg_pu_T5_300-5
