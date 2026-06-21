@@ -130,15 +130,15 @@ class Trainer:
         return metrics
 
     @torch.no_grad()
-    def evaluate_final(self) -> Tuple[Dict[str, float], np.ndarray]:
-        """最终评估（测试集），返回指标和混淆矩阵"""
+    def evaluate_final(self, desc: str = 'Final Test') -> Tuple[Dict[str, float], np.ndarray]:
+        """测试集评估，返回指标和混淆矩阵。desc用于区分逐epoch测试和最终测试。"""
         self.model.eval()
         total_loss = 0.0
         total_samples = 0
         all_true = []
         all_pred = []
 
-        pbar = tqdm(self.test_loader, desc='Final Test', leave=False)
+        pbar = tqdm(self.test_loader, desc=desc, leave=False)
         for batch in pbar:
             batch = move_batch_to_device(batch, self.device)
             logits = self.model(batch)['logits']
@@ -174,37 +174,66 @@ class Trainer:
     def fit(self) -> List[Dict]:
         epochs = int(self.cfg['train']['epochs'])
         history: List[Dict] = []
+        last_test_metrics: Optional[Dict[str, float]] = None
+        last_cm: Optional[np.ndarray] = None
 
         for epoch in range(1, epochs + 1):
-            train_metrics = self.train_one_epoch(epoch)# 训练一个epoch
-            self.scheduler.step()# 更新学习率
+            # 1) 训练一个epoch
+            train_metrics = self.train_one_epoch(epoch)
+            self.scheduler.step()
 
-            # 记录训练结果
-            train_row = {
-                'phase': 'train',
+            # 2) 每个epoch结束后立即在测试集上评估一次
+            test_metrics, cm = self.evaluate_final(desc=f'Test {epoch}')
+            last_test_metrics = test_metrics
+            last_cm = cm
+
+            # 3) 一行同时记录训练指标和测试指标，便于后续直接画epoch-accuracy曲线
+            row = {
+                'phase': 'epoch',
                 'epoch': epoch,
                 'lr': self.optimizer.param_groups[0]['lr'],
                 **{f'train_{k}': v for k, v in train_metrics.items()},
+                **{f'test_{k}': v for k, v in test_metrics.items()},
             }
-            history.append(train_row)
-            self.recorder.append(train_row)
+            history.append(row)
+            self.recorder.append(row)
             self.recorder.flush()
 
-            # 保存checkpoint（如果配置开启）
+            # 4) 保存checkpoint（如果配置开启）
             if self.cfg.get('output', {}).get('save_checkpoint', False):
-                save_trainer_checkpoint(output_dir=self.output_dir, epoch=epoch, history=history, model=self.model, optimizer=self.optimizer, scheduler=self.scheduler,cfg=self.cfg)
-            log_train_epoch(self.logger, epoch, epochs, train_metrics)
+                save_trainer_checkpoint(
+                    output_dir=self.output_dir,
+                    epoch=epoch,
+                    history=history,
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    scheduler=self.scheduler,
+                    cfg=self.cfg
+                )
 
-        # 最终测试
-        final_metrics, cm = self.evaluate_final()
-        # 记录最终测试结果
-        final_row = {'phase': 'final_test', 'epoch': epochs, **{f'test_{k}': v for k, v in final_metrics.items()},}
-        history.append(final_row)
-        self.recorder.append(final_row)
-        self.recorder.flush()
-        export_final_confusion_matrix(cm=cm, test_loader=self.test_loader, num_classes=int(self.cfg['data']['num_classes']), output_dir=self.output_dir)# 导出混淆矩阵
-        log_final_test(self.logger, final_metrics)# 打印最终测试日志
-        save_final_test_metrics(self.output_dir, epochs, final_metrics)       # 保存最终测试指标
+            log_train_epoch(self.logger, epoch, epochs, train_metrics)
+            self.logger.info(
+                f"[Epoch {epoch}/{epochs}] "
+                f"test_acc={test_metrics.get('acc', 0.0):.4f}, "
+                f"test_f1_macro={test_metrics.get('f1_macro', 0.0):.4f}"
+            )
+
+        # 最后一个epoch已经测试过，直接复用最后一次测试结果保存最终指标和混淆矩阵
+        final_metrics = last_test_metrics if last_test_metrics is not None else {}
+        cm = last_cm if last_cm is not None else np.zeros(
+            (int(self.cfg['data']['num_classes']), int(self.cfg['data']['num_classes'])),
+            dtype=np.int64
+        )
+
+        export_final_confusion_matrix(
+            cm=cm,
+            test_loader=self.test_loader,
+            num_classes=int(self.cfg['data']['num_classes']),
+            output_dir=self.output_dir
+        )
+        log_final_test(self.logger, final_metrics)
+        save_final_test_metrics(self.output_dir, epochs, final_metrics)
+
         # 释放资源
         self.close()
         return history
