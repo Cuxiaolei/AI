@@ -35,11 +35,11 @@ do
 
             echo "【第一波】开始运行: ${EXP_NAME}"
             python -m src.main --configs "${CONFIG_PATH}" \
-                ++data.train_h5="${TRAIN_H5}" \
-                ++data.test_h5="${TEST_H5}" \
-                ++model.proto_residual_alpha="${ALPHA}" \
-                ++imbalance_power="${IMBALANCE_POWER}" \
-                ++output.exp_name="${EXP_NAME}"
+                data.train_h5="${TRAIN_H5}" \
+                data.test_h5="${TEST_H5}" \
+                model.proto_residual_alpha="${ALPHA}" \
+                imbalance_power="${IMBALANCE_POWER}" \
+                output.exp_name="${EXP_NAME}"
         done
     done
 done
@@ -62,11 +62,11 @@ do
 
             echo "【第二波】开始运行: ${EXP_NAME}"
             python -m src.main --configs "${CONFIG_PATH}" \
-                ++data.train_h5="${TRAIN_H5}" \
-                ++data.test_h5="${TEST_H5}" \
-                ++model.proto_residual_alpha="${ALPHA}" \
-                ++imbalance_power="${IMBALANCE_POWER}" \
-                ++output.exp_name="${EXP_NAME}"
+                data.train_h5="${TRAIN_H5}" \
+                data.test_h5="${TEST_H5}" \
+                model.proto_residual_alpha="${ALPHA}" \
+                imbalance_power="${IMBALANCE_POWER}" \
+                output.exp_name="${EXP_NAME}"
         done
     done
 done
