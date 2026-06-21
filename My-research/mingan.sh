@@ -1,73 +1,72 @@
 #!/bin/bash
+set -e
 
-# 全局基础配置
 CONFIG_PATH="src/configs/mcpdg.yaml"
-ROOT_DATA="/root/data"
+ROOT_DATA="data"
 
-# 数据集列表：数据集类型 前缀编号 副本(1/5)
-# PHM: T1 T3
-# PU: T5 T8
+# 数据集配对：数据集目录名 T编号
 dataset_info=(
-    "phm-spur" "T1"
-    "phm-spur" "T3"
-    "pu" "T5"
-    "pu" "T8"
+    "PHM_spur" "T1"
+    "PHM_spur" "T3"
+    "PU" "T5"
+    "PU" "T8"
 )
-# 副本后缀
-replicas=("1" "5")
+# 两个副本后缀
+replica_suffix=("300-1" "300-5")
 
-# ========== 第一波：IMBALANCE_POWER固定0.5，ALPHA从0到1，步长0.1 ==========
-echo -e "\n==================== 第一组实验：imbalance_power=0.5，alpha遍历0~1(0.1步长) ====================\n"
+# ====================== 第一波：imbalance_power固定0.5，遍历alpha 0~1.0 步长0.1 ======================
+echo -e "\n==================== 第一组实验：imbalance_power=0.5 ====================\n"
 IMBALANCE_POWER=0.5
-# alpha序列：0.0 0.1 ... 1.0
 for ALPHA in $(seq 0 0.1 1.0)
 do
-    for item in "${dataset_info[@]}"
+    # 成对遍历数据集
+    for ((i=0; i<${#dataset_info[@]}; i+=2))
     do
-        # 拆分数据集类型与编号
-        dataset_type=$(echo $item | awk '{print $1}')
-        T_val=$(echo $item | awk '{print $2}')
-        for rep in "${replicas[@]}"
+        DATA_DIR=${dataset_info[$i]}
+        T_VAL=${dataset_info[$i+1]}
+        # 遍历两个副本
+        for suffix in "${replica_suffix[@]}"
         do
-            data_dir="${ROOT_DATA}/${dataset_type}/${dataset_type}_${T_val}_${rep}"
-            TRAIN_H5="${data_dir}/train.h5"
-            TEST_H5="${data_dir}/test.h5"
-            EXP_NAME="mcpdg_${dataset_type}_${T_val}_${rep}_al${ALPHA#*.}_ip${IMBALANCE_POWER#*.}"
+            folder="${DATA_DIR}_${T_VAL}_${suffix}"
+            TRAIN_H5="${ROOT_DATA}/${DATA_DIR}/${folder}/train.h5"
+            TEST_H5="${ROOT_DATA}/${DATA_DIR}/${folder}/test.h5"
+            # 实验命名
+            EXP_NAME="mcpdg_${DATA_DIR,,}_${T_VAL}_${suffix}_al${ALPHA#*.}_ip${IMBALANCE_POWER#*.}"
 
             echo "【第一波】开始运行: ${EXP_NAME}"
             python -m src.main --configs "${CONFIG_PATH}" \
-                data.train_h5="${TRAIN_H5}" \
-                data.test_h5="${TEST_H5}" \
-                model.proto_residual_alpha="${ALPHA}" \
-                imbalance_power="${IMBALANCE_POWER}" \
-                output.exp_name="${EXP_NAME}"
+                ++data.train_h5="${TRAIN_H5}" \
+                ++data.test_h5="${TEST_H5}" \
+                ++model.proto_residual_alpha="${ALPHA}" \
+                ++imbalance_power="${IMBALANCE_POWER}" \
+                ++output.exp_name="${EXP_NAME}"
         done
     done
 done
 
-# ========== 第二波：ALPHA固定0.5，IMBALANCE_POWER从0到1，步长0.1 ==========
-echo -e "\n==================== 第二组实验：alpha=0.5，imbalance_power遍历0~1(0.1步长) ====================\n"
+# ====================== 第二波：alpha固定0.5，遍历imbalance_power 0~1.0 步长0.1 ======================
+echo -e "\n==================== 第二组实验：alpha=0.5 ====================\n"
 ALPHA=0.5
 for IMBALANCE_POWER in $(seq 0 0.1 1.0)
 do
-    for item in "${dataset_info[@]}"
+    for ((i=0; i<${#dataset_info[@]}; i+=2))
     do
-        dataset_type=$(echo $item | awk '{print $1}')
-        T_val=$(echo $item | awk '{print $2}')
-        for rep in "${replicas[@]}"
+        DATA_DIR=${dataset_info[$i]}
+        T_VAL=${dataset_info[$i+1]}
+        for suffix in "${replica_suffix[@]}"
         do
-            data_dir="${ROOT_DATA}/${dataset_type}/${dataset_type}_${T_val}_${rep}"
-            TRAIN_H5="${data_dir}/train.h5"
-            TEST_H5="${data_dir}/test.h5"
-            EXP_NAME="mcpdg_${dataset_type}_${T_val}_${rep}_al${ALPHA#*.}_ip${IMBALANCE_POWER#*.}"
+            folder="${DATA_DIR}_${T_VAL}_${suffix}"
+            TRAIN_H5="${ROOT_DATA}/${DATA_DIR}/${folder}/train.h5"
+            TEST_H5="${ROOT_DATA}/${DATA_DIR}/${folder}/test.h5"
+            EXP_NAME="mcpdg_${DATA_DIR,,}_${T_VAL}_${suffix}_al${ALPHA#*.}_ip${IMBALANCE_POWER#*.}"
 
             echo "【第二波】开始运行: ${EXP_NAME}"
             python -m src.main --configs "${CONFIG_PATH}" \
-                data.train_h5="${TRAIN_H5}" \
-                data.test_h5="${TEST_H5}" \
-                model.proto_residual_alpha="${ALPHA}" \
-                imbalance_power="${IMBALANCE_POWER}" \
-                output.exp_name="${EXP_NAME}"
+                ++data.train_h5="${TRAIN_H5}" \
+                ++data.test_h5="${TEST_H5}" \
+                ++model.proto_residual_alpha="${ALPHA}" \
+                ++imbalance_power="${IMBALANCE_POWER}" \
+                ++output.exp_name="${EXP_NAME}"
         done
     done
 done
