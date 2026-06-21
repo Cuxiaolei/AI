@@ -6,13 +6,13 @@ ROOT_DATA="data"
 
 # 数据集配对：数据集目录名 T编号
 dataset_info=(
-    "phm_spur" "T1"
-    "phm_spur" "T3"
+    "phm-spur" "T1"
+    "phm-spur" "T3"
     "pu" "T5"
     "pu" "T8"
 )
 # 两个副本后缀
-replica_suffix=("300-1" "300-5")
+replica_suffix=("1" "5")
 
 # ====================== 第一波：imbalance_power固定0.5，遍历alpha 0~1.0 步长0.1 ======================
 echo -e "\n==================== 第一组实验：imbalance_power=0.5 ====================\n"
