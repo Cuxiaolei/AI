@@ -13,24 +13,13 @@ from src.trainer import Trainer
 from src.components.condition_utils import build_condition_table_from_dataset
 from src.utils.config import dump_yaml, load_config
 from src.utils.runtime import get_device, set_seed
-from omegaconf import OmegaConf  # 新增
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--configs', type=str, required=True)
-    # 新增：接收末尾所有 key=value 覆写参数
-    parser.add_argument("overrides", nargs="*", help="config override like key=value")
     args = parser.parse_args()
-
-    # 加载基础配置
     cfg = load_config(args.configs)
-    # 合并命令行覆写参数
-    if args.overrides:
-        override_conf = OmegaConf.from_dotlist(args.overrides)
-        cfg = OmegaConf.merge(OmegaConf.create(cfg), override_conf)
-        # 转回普通dict（如果load_config输出是dict）
-        cfg = OmegaConf.to_container(cfg, resolve=True)
 
     config_path = Path(args.configs)
     device = get_device(cfg['train'].get('device', 'auto'))
