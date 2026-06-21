@@ -6,10 +6,10 @@ ROOT_DATA="data"
 
 # 数据集配对：数据集目录名 T编号
 dataset_info=(
-    "PHM_spur" "T1"
-    "PHM_spur" "T3"
-    "PU" "T5"
-    "PU" "T8"
+    "phm_spur" "T1"
+    "phm_spur" "T3"
+    "pu" "T5"
+    "pu" "T8"
 )
 # 两个副本后缀
 replica_suffix=("300-1" "300-5")
