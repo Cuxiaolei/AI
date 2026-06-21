@@ -2,7 +2,7 @@
 set -e
 
 CONFIG_PATH="src/configs/mcpdg.yaml"
-ROOT_DATA="data"
+ROOT_DATA="/root/"
 
 # 数据集配对：数据集目录名 T编号
 dataset_info=(
