@@ -35,9 +35,9 @@ with open("run_debug.sh", "w", encoding="utf-8") as f:
 
                 # 数据集参数
                 if data_dir.startswith("phm"):
-                    ds_arg = "data.dataset_name=phm"
+                    dataset = "phm"
                 else:
-                    ds_arg = "data.dataset_name=pu"
+                    dataset = "pu"
 
                 # 实验开始打印
                 f.write(f'echo "实验（{exp_name}）准备开始"\n')
@@ -47,7 +47,7 @@ with open("run_debug.sh", "w", encoding="utf-8") as f:
                     f'python -m src.main --configs {CONFIG_PATH} '
                     f'data.train_h5="{train_h5}" '
                     f'data.test_h5="{test_h5}" '
-                    f'{ds_arg} '
+                    f'data.dataset_name="{dataset}" '
                     f'model.proto_residual_alpha={alpha} '
                     f'imbalance_power={fixed_ip} '
                     f'output.exp_name="{exp_name}" '
@@ -72,10 +72,11 @@ with open("run_debug.sh", "w", encoding="utf-8") as f:
                 ip_str = str(ip).replace(".", "")
                 exp_name = f"mcpdg_{data_dir.lower()}_{t_val}_{suf}_al{alpha_str}_ip{ip_str}"
 
+                # 数据集参数
                 if data_dir.startswith("phm"):
-                    ds_arg = "data.dataset_name=phm"
+                    dataset = "phm"
                 else:
-                    ds_arg = "data.dataset_name=pu"
+                    dataset = "pu"
 
                 f.write(f'echo "实验（{exp_name}）准备开始"\n')
 
@@ -83,7 +84,7 @@ with open("run_debug.sh", "w", encoding="utf-8") as f:
                     f'python -m src.main --configs {CONFIG_PATH} '
                     f'data.train_h5="{train_h5}" '
                     f'data.test_h5="{test_h5}" '
-                    f'{ds_arg} '
+                    f'data.dataset_name="{dataset}" '
                     f'model.proto_residual_alpha={fixed_alpha} '
                     f'imbalance_power={ip} '
                     f'output.exp_name="{exp_name}" '
