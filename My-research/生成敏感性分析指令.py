@@ -36,8 +36,10 @@ with open("mingan.sh", "w", encoding="utf-8") as f:
                 # 数据集参数
                 if data_dir.startswith("phm"):
                     dataset = "phm"
+                    num_class = 8
                 else:
                     dataset = "pu"
+                    num_class = 9
 
                 # 实验开始打印
                 f.write(f'echo "实验（{exp_name}）准备开始"\n')
@@ -48,6 +50,7 @@ with open("mingan.sh", "w", encoding="utf-8") as f:
                     f'data.train_h5="{train_h5}" '
                     f'data.test_h5="{test_h5}" '
                     f'data.dataset_name="{dataset}" '
+                    f'data.num_classes={num_class} '
                     f'model.proto_residual_alpha={alpha} '
                     f'imbalance_power={fixed_ip} '
                     f'output.exp_name="{exp_name}" '
@@ -75,8 +78,10 @@ with open("mingan.sh", "w", encoding="utf-8") as f:
                 # 数据集参数
                 if data_dir.startswith("phm"):
                     dataset = "phm"
+                    num_class = 8
                 else:
                     dataset = "pu"
+                    num_class = 9
 
                 f.write(f'echo "实验（{exp_name}）准备开始"\n')
 
@@ -85,6 +90,7 @@ with open("mingan.sh", "w", encoding="utf-8") as f:
                     f'data.train_h5="{train_h5}" '
                     f'data.test_h5="{test_h5}" '
                     f'data.dataset_name="{dataset}" '
+                    f'data.num_classes={num_class} '
                     f'model.proto_residual_alpha={fixed_alpha} '
                     f'imbalance_power={ip} '
                     f'output.exp_name="{exp_name}" '
