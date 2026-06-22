@@ -7,17 +7,17 @@ ERROR_LOG="experiment_error.log"
 # ==================== 第一组实验：imbalance_power=0.5 ====================
 echo -e "\n==================== 第一组实验：imbalance_power=0.5 ====================\n"
 
-echo "实验（mcpdg_phm-spur_T1_1_al00_ip05）准备开始"
-python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T1_1/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T1_1/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T1_1_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T1_1_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T1_1_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
-
-echo "实验（mcpdg_phm-spur_T1_5_al00_ip05）准备开始"
-python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T1_5/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T1_5/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T1_5_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T1_5_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T1_5_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
-
-echo "实验（mcpdg_phm-spur_T3_1_al00_ip05）准备开始"
-python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T3_1/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T3_1/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T3_1_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T3_1_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T3_1_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
-
-echo "实验（mcpdg_phm-spur_T3_5_al00_ip05）准备开始"
-python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T3_5/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T3_5/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T3_5_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T3_5_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T3_5_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
+#echo "实验（mcpdg_phm-spur_T1_1_al00_ip05）准备开始"
+#python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T1_1/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T1_1/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T1_1_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T1_1_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T1_1_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
+#
+#echo "实验（mcpdg_phm-spur_T1_5_al00_ip05）准备开始"
+#python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T1_5/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T1_5/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T1_5_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T1_5_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T1_5_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
+#
+#echo "实验（mcpdg_phm-spur_T3_1_al00_ip05）准备开始"
+#python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T3_1/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T3_1/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T3_1_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T3_1_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T3_1_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
+#
+#echo "实验（mcpdg_phm-spur_T3_5_al00_ip05）准备开始"
+#python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/phm-spur/phm-spur_T3_5/train.h5" data.test_h5="/root/data/phm-spur/phm-spur_T3_5/test.h5" data.dataset_name="phm" data.num_classes=8 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_phm-spur_T3_5_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_phm-spur_T3_5_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_phm-spur_T3_5_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
 
 echo "实验（mcpdg_pu_T5_1_al00_ip05）准备开始"
 python -m src.main --configs src/configs/mcpdg.yaml data.train_h5="/root/data/pu/pu_T5_1/train.h5" data.test_h5="/root/data/pu/pu_T5_1/test.h5" data.dataset_name="pu" data.num_classes=9 model.proto_residual_alpha=0.0 imbalance_power=0.5 output.exp_name="mcpdg_pu_T5_1_al00_ip05" || { echo "[`date +%Y-%m-%d\ %H:%M:%S`] mcpdg_pu_T5_1_al00_ip05 执行失败" >> $ERROR_LOG; echo "==== 实验【mcpdg_pu_T5_1_al00_ip05】运行异常，跳过当前任务，继续执行下一组 ===="; }
