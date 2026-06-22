@@ -10,7 +10,7 @@ dataset_info = [
 ]
 replica_suffix = ["1", "5"]
 
-with open("run_debug.sh", "w", encoding="utf-8") as f:
+with open("mingan.sh", "w", encoding="utf-8") as f:
     f.write("#!/bin/bash\n")
     f.write("set -e\n\n")
     f.write(f'ERROR_LOG="{ERROR_LOG}"\n')
